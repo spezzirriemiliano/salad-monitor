@@ -1,12 +1,12 @@
 @echo off
 :: ============================================================
-::  Salad Monitor Agent — no requiere Python ni instalacion
-::  Usa PowerShell (incluido en Windows) + nvidia-smi (drivers NVIDIA)
+::  Salad Monitor Agent — no Python required
+::  Uses PowerShell (included in Windows) + nvidia-smi (NVIDIA drivers)
 ::
-::  Uso:
-::    salad_agent.bat            -> inicia el agente
-::    salad_agent.bat -Install   -> crea tarea programada y arranca
-::    salad_agent.bat -Uninstall -> elimina la tarea programada
+::  Usage:
+::    salad_agent.bat            -> start the agent
+::    salad_agent.bat -Install   -> register scheduled task and start
+::    salad_agent.bat -Uninstall -> remove the scheduled task
 :: ============================================================
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$env:BAT_PATH = '%~f0';" ^
@@ -17,7 +17,7 @@ exit /b
 
 #PS_START
 # ============================================================
-#  PowerShell agent — todo lo de arriba es solo el lanzador
+#  PowerShell agent — everything above is just the launcher
 # ============================================================
 
 param([switch]$Install, [switch]$Uninstall)
@@ -27,18 +27,18 @@ $ScriptDir   = Split-Path $ScriptPath
 $ConfigPath  = Join-Path $ScriptDir "salad_agent_config.json"
 $TaskName    = "SaladMonitorAgent"
 
-# ── Instalar / desinstalar tarea programada ─────────────────
+# ── Install / uninstall scheduled task ──────────────────────
 
 if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Write-Host "[OK] Tarea '$TaskName' eliminada."
+    Write-Host "[OK] Task '$TaskName' removed."
     exit 0
 }
 
 if ($Install) {
     if (-not (Test-Path $ConfigPath)) {
-        Write-Host "[ERROR] No se encontro salad_agent_config.json"
-        Write-Host "        Copia salad_agent_config.example.json y editalo."
+        Write-Host "[ERROR] salad_agent_config.json not found."
+        Write-Host "        Copy salad_agent_config.example.json and edit it."
         pause; exit 1
     }
     $action  = New-ScheduledTaskAction -Execute "cmd.exe" `
@@ -49,17 +49,17 @@ if ($Install) {
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
     Register-ScheduledTask -TaskName $TaskName -Action $action `
         -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-    Write-Host "[OK] Tarea '$TaskName' creada. Se ejecutara automaticamente al iniciar Windows."
-    Write-Host "[  ] Iniciando agente ahora..."
+    Write-Host "[OK] Task '$TaskName' created. It will run automatically on Windows startup."
+    Write-Host "[  ] Starting agent now..."
     Start-ScheduledTask -TaskName $TaskName
     exit 0
 }
 
-# ── Cargar configuracion ────────────────────────────────────
+# ── Load configuration ───────────────────────────────────────
 
 if (-not (Test-Path $ConfigPath)) {
-    Write-Host "[ERROR] No se encontro salad_agent_config.json en $ScriptDir"
-    Write-Host "        Copia salad_agent_config.example.json y editalo."
+    Write-Host "[ERROR] salad_agent_config.json not found in $ScriptDir"
+    Write-Host "        Copy salad_agent_config.example.json and edit it."
     exit 1
 }
 
@@ -74,13 +74,13 @@ $Version = "v0.1"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
-Write-Host "[INFO] Intervalo  : ${IntervalSeconds}s"
+Write-Host "[INFO] Interval   : ${IntervalSeconds}s"
 
-# ── Nombres de proceso de Salad ─────────────────────────────
+# ── Salad process names ──────────────────────────────────────
 
 $SaladProcessNames = @("salad", "saladcloud", "salad-client")
 
-# ── Constantes throttle (bitmask NVML) ──────────────────────
+# ── Throttle constants (NVML bitmask) ───────────────────────
 
 $ThrottleMap = [ordered]@{
     power_cap       = 0x04
@@ -142,7 +142,7 @@ function Is-SaladRunning {
 function Get-GpuMetrics {
     $gpus = [System.Collections.ArrayList]@()
 
-    # Una sola llamada para todas las metricas GPU
+    # Single call for all GPU metrics
     $fields = "index,name,utilization.gpu,temperature.gpu,temperature.memory," +
               "memory.used,memory.total,power.draw,power.limit,fan.speed," +
               "pstate,clocks_throttle_reasons.active," +
@@ -152,10 +152,10 @@ function Get-GpuMetrics {
     $rows = & nvidia-smi --query-gpu=$fields --format=csv,noheader,nounits 2>$null
     if (-not $rows) { return $gpus }
 
-    # Una sola llamada para todos los procesos compute en todas las GPUs
+    # Single call for all compute processes across all GPUs
     $computeProcs = & nvidia-smi --query-compute-apps=gpu_index,process_name --format=csv,noheader 2>$null
 
-    # Armar mapa: gpu_index -> [process_names]
+    # Build map: gpu_index -> [process_names]
     $procsByGpu = @{}
     foreach ($line in $computeProcs) {
         $parts = "$line".Trim() -split ",\s*", 2
@@ -189,7 +189,7 @@ function Get-GpuMetrics {
         $clockMem   = NvInt   $c[15]
         $clockMemMax= NvInt   $c[16]
 
-        # ¿Salad esta realmente usando esta GPU? (del mapa ya construido)
+        # Is Salad actually using this GPU? (from the map already built)
         $saladOnGpu = $false
         $procsOnThisGpu = $procsByGpu["$idx"]
         if ($procsOnThisGpu) {
@@ -263,12 +263,12 @@ function Send-Metrics($payload) {
                     -TimeoutSec 10
         return $true
     } catch {
-        Write-Host "[ERROR] No se pudo enviar: $_"
+        Write-Host "[ERROR] Failed to send: $_"
         return $false
     }
 }
 
-# ── Info estática (se obtiene una sola vez) ──────────────────
+# ── Static info (fetched once) ───────────────────────────────
 
 $CpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
 
@@ -278,11 +278,11 @@ $SaladVersion = if (Test-Path $SaladExe) {
 } else { $null }
 
 if ($CachedSaladMachineId) {
-    # Ya estaba guardado en el config, usarlo directamente
+    # Already saved in config, use it directly
     $SaladMachineId = $CachedSaladMachineId
-    Write-Host "[INFO] Salad Machine ID : $SaladMachineId (desde config)"
+    Write-Host "[INFO] Salad Machine ID : $SaladMachineId (from config)"
 } else {
-    # Buscarlo en los logs de Salad
+    # Search for it in the Salad logs
     $SaladMachineId = $null
     try {
         $saladLogs = @(
@@ -305,20 +305,20 @@ if ($CachedSaladMachineId) {
     } catch { }
 
     if ($SaladMachineId) {
-        # Guardarlo en el config para la proxima vez
+        # Save it to config for next time
         try {
             $cfg | Add-Member -NotePropertyName "salad_machine_id" -NotePropertyValue $SaladMachineId -Force
             $cfg | ConvertTo-Json -Depth 5 | Set-Content $ConfigPath -Encoding UTF8
-            Write-Host "[INFO] Salad Machine ID : $SaladMachineId (guardado en config)"
+            Write-Host "[INFO] Salad Machine ID : $SaladMachineId (saved to config)"
         } catch {
-            Write-Host "[INFO] Salad Machine ID : $SaladMachineId (no se pudo guardar en config)"
+            Write-Host "[INFO] Salad Machine ID : $SaladMachineId (could not save to config)"
         }
     } else {
         Write-Host "[ERROR] Salad Machine ID not found in logs or config. Please set 'salad_machine_id' manually in salad_agent_config.json." -ForegroundColor Red
     }
 }
 
-# ── Loop principal ───────────────────────────────────────────
+# ── Main loop ────────────────────────────────────────────────
 
 while ($true) {
     try {
