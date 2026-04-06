@@ -1,0 +1,19 @@
+{
+  "server": {
+    "port": 5000,
+    "api_key": "MY_RANDOM_API_KEY123"
+  },
+  "expected_machines": {
+  },
+  "telegram": {
+    "token": "",
+    "chat_id": "",
+    "report_interval_minutes": 15,
+    "stale_threshold_minutes": 5,
+    "notifications_enabled": true
+  },
+  "salad_api": {
+    "auth_cookie": "",
+    "cf_clearance": ""
+  }
+}

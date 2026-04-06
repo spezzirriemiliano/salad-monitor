@@ -1,0 +1,7 @@
+{
+  "machine_id": "PC-01",
+  "server_url": "http://192.168.1.XX:5000",
+  "api_key": "MY_RANDOM_API_KEY123",
+  "interval_seconds": 60,
+  "salad_machine_id": ""
+}
