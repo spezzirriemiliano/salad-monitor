@@ -29,6 +29,55 @@
       min-height: 100vh;
     }
 
+    /* ── Auth overlay ── */
+    #auth-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    #auth-overlay.visible { display: flex; }
+    .auth-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .auth-box h2 { font-size: 18px; font-weight: 600; }
+    .auth-box p  { color: var(--muted); font-size: 12px; }
+    .auth-box input[type=password] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 14px;
+      outline: none;
+    }
+    .auth-box input[type=password]:focus { border-color: var(--blue); }
+    .auth-box button.primary {
+      background: var(--blue);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+    .auth-box button.primary:hover { opacity: 0.85; }
+    .auth-error { color: var(--red); font-size: 12px; min-height: 16px; }
+
     /* ── Header ── */
     header {
       position: sticky;
@@ -36,13 +85,22 @@
       z-index: 10;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 12px 20px;
+      padding: 10px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #header-top {
       display: flex;
       align-items: center;
-      gap: 20px;
-      flex-wrap: wrap;
     }
     header h1 { font-size: 16px; font-weight: 600; letter-spacing: .5px; }
+    #header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
     .badge {
       padding: 2px 10px;
       border-radius: 12px;
@@ -55,16 +113,9 @@
     .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
     .badge.red    { color: var(--red);    border-color: var(--red); }
     #last-update  { color: var(--muted); font-size: 12px; }
-    #countdown    { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-    #badges-row, #status-row { display: flex; gap: 8px; align-items: center; }
-    #status-row { margin-left: auto; }
-    @media (max-width: 600px) {
-      header { flex-direction: column; align-items: flex-start; gap: 8px; }
-      #status-row { margin-left: 0; }
-    }
-    button#refresh-btn,
-    button#autoreload-btn,
-    button#telegram-btn {
+    #header-bottom { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    #badges-row, #status-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button#refresh-btn {
       background: #21262d;
       border: 1px solid var(--border);
       color: var(--text);
@@ -74,13 +125,53 @@
       font-size: 12px;
       transition: background .15s, color .15s, border-color .15s;
     }
-    button#refresh-btn:hover,
-    button#autoreload-btn:hover,
-    button#telegram-btn:hover { background: #30363d; }
-    button#autoreload-btn.on { color: var(--green); border-color: rgba(63,185,80,.5); }
-    button#autoreload-btn.off { color: var(--muted); }
-    button#telegram-btn.on  { color: var(--green); border-color: rgba(63,185,80,.5); }
-    button#telegram-btn.off { color: var(--muted); }
+    button#refresh-btn:hover { background: #30363d; }
+
+    /* ── Gear dropdown ── */
+    #gear-menu { position: relative; }
+    #gear-btn {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      transition: background .15s;
+    }
+    #gear-btn:hover { background: #30363d; }
+    #gear-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 210px;
+      z-index: 100;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    #gear-dropdown.open { display: block; }
+    .gear-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text);
+      transition: background .1s;
+      gap: 12px;
+    }
+    .gear-item:hover { background: #21262d; }
+    .gear-item.danger { color: var(--red); }
+    .gear-item .gear-label { flex: 1; }
+    .gear-item .gear-val { color: var(--muted); font-size: 11px; }
+    .gear-item .gear-val.on { color: var(--green); }
+    .gear-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
     /* ── GPU summary ── */
     #gpu-summary {
@@ -129,19 +220,25 @@
       font-family: monospace;
     }
 
-    /* ── Sort controls ── */
+    /* ── View + Sort controls ── */
     #sort-bar {
       padding: 0 20px;
       display: flex;
-      align-items: center;
-      gap: 8px;
+      align-items: flex-start;
+      gap: 16px;
       margin-top: 12px;
     }
-    #sort-bar label {
-      font-size: 12px;
-      color: var(--muted);
+    .bar-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
-    #sort-bar select {
+    .bar-group label {
+      font-size: 11px;
+      color: var(--muted);
+      display: block;
+    }
+    #view-bar select, #sort-bar select {
       background: #21262d;
       border: 1px solid var(--border);
       color: var(--text);
@@ -152,7 +249,7 @@
       outline: none;
       transition: border-color .15s;
     }
-    #sort-bar select:hover { border-color: #8b949e; }
+    #view-bar select:hover, #sort-bar select:hover { border-color: #8b949e; }
     #sort-bar button {
       background: #21262d;
       border: 1px solid var(--border);
@@ -188,6 +285,7 @@
     /* ── View toggle button group ── */
     .view-btns {
       display: flex;
+      width: fit-content;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
@@ -550,23 +648,61 @@
 </head>
 <body>
 
+<!-- Auth overlay (setup + login) -->
+<div id="auth-overlay">
+  <!-- Setup screen -->
+  <div id="auth-setup" class="auth-box" style="display:none">
+    <h2>⚡ Salad Monitor</h2>
+    <p>Set up a password to protect the dashboard.</p>
+    <input type="password" id="setup-password" placeholder="Password (min. 6 characters)" />
+    <input type="password" id="setup-confirm" placeholder="Confirm password" />
+    <div class="auth-error" id="setup-error"></div>
+    <button class="primary" onclick="submitSetup()">Set password</button>
+  </div>
+  <!-- Login screen -->
+  <div id="auth-login" class="auth-box" style="display:none">
+    <h2>⚡ Salad Monitor</h2>
+    <p>Enter your password to continue.</p>
+    <input type="password" id="login-password" placeholder="Password" onkeydown="if(event.key==='Enter')submitLogin()" />
+    <div class="auth-error" id="login-error"></div>
+    <button class="primary" onclick="submitLogin()">Log in</button>
+  </div>
+</div>
+
 <header>
-  <h1>⚡ Salad Monitor</h1>
-  <div id="badges-row">
-    <span id="active-badge" class="badge">—</span>
-    <span id="earning-badge" class="badge">—</span>
+  <div id="header-top">
+    <h1>⚡ Salad Monitor</h1>
+    <div id="header-actions">
+      <button id="refresh-btn" onclick="fetchData()">↻ Refresh</button>
+      <div id="gear-menu">
+        <button id="gear-btn" onclick="toggleGear()">⚙</button>
+        <div id="gear-dropdown">
+          <div class="gear-item" id="gear-telegram" onclick="toggleTelegram()" style="display:none">
+            <span class="gear-label">Telegram notifications</span>
+            <span class="gear-val" id="gear-telegram-val">—</span>
+          </div>
+          <div class="gear-item" onclick="toggleAutoReload()">
+            <span class="gear-label">Auto refresh</span>
+            <span class="gear-val" id="gear-autoreload-val">ON</span>
+          </div>
+          <div class="gear-item" onclick="toggleSaladId()">
+            <span class="gear-label">Salad ID</span>
+            <span class="gear-val" id="gear-saladid-val">Show</span>
+          </div>
+          <hr class="gear-divider">
+          <div class="gear-item danger" onclick="logout()">
+            <span class="gear-label">⏻ Logout</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div id="status-row">
-    <button id="telegram-btn" onclick="toggleTelegram()">Telegram notifications: —</button>
-    <button id="autoreload-btn" onclick="toggleAutoReload()">Auto refresh: ON</button>
-    <button id="refresh-btn" onclick="fetchData()">↻ Refresh</button>
-    <span id="last-update">—</span>
-    <span id="countdown"></span>
-  </div>
-  <div class="view-btns">
-    <button class="view-btn" onclick="setView(0)">Compact</button>
-    <button class="view-btn" onclick="setView(1)">Normal</button>
-    <button class="view-btn" onclick="setView(2)">Detailed</button>
+  <div id="header-bottom">
+    <div id="badges-row">
+      <span id="active-badge" class="badge">—</span>
+      <span id="earning-badge" class="badge">—</span>
+    </div>
+    <span id="last-update" style="margin-left:auto">—</span>
   </div>
 </header>
 
@@ -578,18 +714,30 @@
 <div id="gpu-summary"></div>
 <div id="alerts-wrap"></div>
 <div id="sort-bar">
-  <label>Sort by</label>
-  <select id="sort-field" onchange="applySortAndRender()">
-    <option value="name">PC Name</option>
-    <option value="earning">Earnings</option>
-    <option value="gpu_temp">GPU Temp</option>
-    <option value="gpu_power">GPU Power</option>
-  </select>
-  <select id="sort-dir" onchange="applySortAndRender()">
-    <option value="asc">ASC</option>
-    <option value="desc">DESC</option>
-  </select>
-  <button id="saladid-btn" onclick="toggleSaladId()">Salad ID: Hide</button>
+  <div class="bar-group">
+    <label>Sort by</label>
+    <select id="sort-field" onchange="applySortAndRender()">
+      <option value="name">PC Name</option>
+      <option value="earning">Earnings</option>
+      <option value="gpu_temp">GPU Temp</option>
+      <option value="gpu_power">GPU Power</option>
+    </select>
+  </div>
+  <div class="bar-group">
+    <label>Direction</label>
+    <select id="sort-dir" onchange="applySortAndRender()">
+      <option value="asc">ASC</option>
+      <option value="desc">DESC</option>
+    </select>
+  </div>
+  <div class="bar-group" style="margin-left:auto">
+    <label>View</label>
+    <select id="view-select" onchange="setView(parseInt(this.value))">
+      <option value="0">Compact</option>
+      <option value="1">Normal</option>
+      <option value="2">Detailed</option>
+    </select>
+  </div>
 </div>
 <div id="grid"><div id="loading">Loading data...</div></div>
 
@@ -614,29 +762,29 @@
     } catch(_) {}
   }
 
+  let _telegramEnabled = false;
+
   async function toggleTelegram() {
-    const btn = document.getElementById('telegram-btn');
-    const currentlyOn = btn.classList.contains('on');
-    applyTelegramBtn(!currentlyOn);
+    const newVal = !_telegramEnabled;
+    applyTelegramVal(newVal);
     try {
       const r = await fetch('/api/telegram', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ enabled: !currentlyOn })
+        body: JSON.stringify({ enabled: newVal })
       });
       const d = await r.json();
-      applyTelegramBtn(d.enabled);
+      applyTelegramVal(d.enabled);
     } catch(e) {
-      applyTelegramBtn(currentlyOn);
+      applyTelegramVal(!newVal);
       console.error('Telegram toggle failed:', e);
     }
   }
 
-  function applyTelegramBtn(enabled) {
-    const btn = document.getElementById('telegram-btn');
-    btn.textContent = `Telegram notifications: ${enabled ? 'ON' : 'OFF'}`;
-    btn.classList.toggle('on', enabled);
-    btn.classList.toggle('off', !enabled);
+  function applyTelegramVal(enabled) {
+    _telegramEnabled = enabled;
+    const val = document.getElementById('gear-telegram-val');
+    if (val) { val.textContent = enabled ? 'ON' : 'OFF'; val.className = 'gear-val' + (enabled ? ' on' : ''); }
   }
 
   function sortMachines(machines) {
@@ -679,9 +827,8 @@
   }
 
   function applySaladIdBtn() {
-    const btn = document.getElementById('saladid-btn');
-    btn.textContent = `Salad ID: ${saladIdVisible ? 'Show' : 'Hide'}`;
-    btn.classList.toggle('on', saladIdVisible);
+    const val = document.getElementById('gear-saladid-val');
+    if (val) { val.textContent = saladIdVisible ? 'Show' : 'Hide'; val.className = 'gear-val' + (saladIdVisible ? ' on' : ''); }
     document.body.classList.toggle('hide-salad-id', !saladIdVisible);
   }
 
@@ -693,15 +840,11 @@
   }
 
   function applyAutoReload() {
-    const btn = document.getElementById('autoreload-btn');
-    if (autoReload) {
-      btn.textContent = 'Auto refresh: ON';
-      btn.classList.replace('off', 'on') || btn.classList.add('on');
-    } else {
-      btn.textContent = 'Auto refresh: OFF';
-      btn.classList.replace('on', 'off') || btn.classList.add('off');
+    const val = document.getElementById('gear-autoreload-val');
+    if (val) { val.textContent = autoReload ? 'ON' : 'OFF'; val.className = 'gear-val' + (autoReload ? ' on' : ''); }
+    if (!autoReload) {
       clearInterval(timer);
-      document.getElementById('countdown').textContent = '';
+      document.getElementById('refresh-btn').innerHTML = '↻ Refresh';
     }
   }
   let viewLevel      = parseInt(localStorage.getItem('viewLevel') ?? '1');
@@ -726,6 +869,8 @@
     const grid = document.getElementById('grid');
     grid.classList.remove('view-compact', 'view-normal', 'view-detailed');
     grid.classList.add(['view-compact', 'view-normal', 'view-detailed'][viewLevel]);
+    const sel = document.getElementById('view-select');
+    if (sel) sel.value = viewLevel;
     document.querySelectorAll('.view-btn').forEach((btn, i) => {
       btn.classList.toggle('active', i === viewLevel);
     });
@@ -1100,6 +1245,7 @@ const gpuHot = machines.filter(m => {
 
     try {
       const res = await fetch('/api/dashboard');
+      if (res.status === 401) throw new Error('401');
       if (!res.ok) throw new Error(res.statusText);
       const data = await res.json();
 
@@ -1119,9 +1265,9 @@ const gpuHot = machines.filter(m => {
         banner.classList.add('hidden');
       }
 
-      const telegramBtn = document.getElementById('telegram-btn');
-      telegramBtn.style.display = data.telegram_configured ? '' : 'none';
-      if (data.telegram_configured) applyTelegramBtn(data.telegram_enabled);
+      const gearTelegram = document.getElementById('gear-telegram');
+      if (gearTelegram) gearTelegram.style.display = data.telegram_configured ? '' : 'none';
+      if (data.telegram_configured) applyTelegramVal(data.telegram_enabled);
 
       lastMachines = data.machines;
       renderAlerts(data.machines);
@@ -1145,24 +1291,101 @@ const gpuHot = machines.filter(m => {
         `Updated: ${t.toLocaleTimeString()}`;
 
     } catch (e) {
+      if (e.message === '401') { showAuthOverlay(); return; }
       console.error('Fetch error:', e.message);
     }
 
+    const refreshBtn = document.getElementById('refresh-btn');
     if (autoReload) {
       timer = setInterval(() => {
         countdown--;
-        document.getElementById('countdown').textContent = `Next update: ${countdown}s`;
+        refreshBtn.innerHTML = `↻ Refresh <span style="color:var(--green);font-variant-numeric:tabular-nums">${countdown}s</span>`;
         if (countdown <= 0) fetchData();
       }, 1000);
     } else {
-      document.getElementById('countdown').textContent = '';
+      refreshBtn.innerHTML = '↻ Refresh';
     }
   }
+
+  async function logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    clearInterval(timer);
+    document.getElementById('auth-login').style.display = '';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').textContent = '';
+    showAuthOverlay();
+    setTimeout(() => document.getElementById('login-password').focus(), 50);
+  }
+
+  // ── Auth ────────────────────────────────────────────────────
+
+  function showAuthOverlay() {
+    document.getElementById('auth-overlay').classList.add('visible');
+  }
+
+  function hideAuthOverlay() {
+    document.getElementById('auth-overlay').classList.remove('visible');
+  }
+
+  async function checkAuth() {
+    const res = await fetch('/api/auth_status');
+    const data = await res.json();
+    if (data.setup_required) {
+      document.getElementById('auth-setup').style.display = '';
+      showAuthOverlay();
+    } else if (!data.authenticated) {
+      document.getElementById('auth-login').style.display = '';
+      showAuthOverlay();
+      setTimeout(() => document.getElementById('login-password').focus(), 50);
+    } else {
+      fetchData();
+    }
+  }
+
+  async function submitSetup() {
+    const pw  = document.getElementById('setup-password').value;
+    const pw2 = document.getElementById('setup-confirm').value;
+    const err = document.getElementById('setup-error');
+    if (pw.length < 6)  { err.textContent = 'Password must be at least 6 characters.'; return; }
+    if (pw !== pw2)     { err.textContent = 'Passwords do not match.'; return; }
+    err.textContent = '';
+    const res = await fetch('/api/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    if (res.ok) { hideAuthOverlay(); fetchData(); }
+    else { const d = await res.json(); err.textContent = d.error || 'Error.'; }
+  }
+
+  async function submitLogin() {
+    const pw  = document.getElementById('login-password').value;
+    const err = document.getElementById('login-error');
+    err.textContent = '';
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    if (res.ok) { hideAuthOverlay(); fetchData(); }
+    else { err.textContent = 'Invalid password.'; document.getElementById('login-password').select(); }
+  }
+
+  function toggleGear() {
+    document.getElementById('gear-dropdown').classList.toggle('open');
+  }
+
+  document.addEventListener('click', e => {
+    const menu = document.getElementById('gear-menu');
+    if (menu && !menu.contains(e.target)) {
+      document.getElementById('gear-dropdown').classList.remove('open');
+    }
+  });
 
   applyAutoReload();
   applySavedSort();
   applySaladIdBtn();
-  fetchData();
+  checkAuth();
 </script>
 </body>
 </html>

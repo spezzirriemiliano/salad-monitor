@@ -93,11 +93,9 @@ Double-click `run_server.bat`. Dependencies are installed automatically on first
 http://localhost:5000/dashboard
 ```
 
-Or from another PC on the same network:
+Or from another PC on the same network: `http://<server-ip>:5000/dashboard`
 
-```
-http://<server-ip>:5000/dashboard
-```
+The first time you open it you will be prompted to set a password. The session does not expire — use the **Logout** button to end it manually. To reset the password, clear `dashboard.password_hash` in `config.json` and restart the server.
 
 ---
 
@@ -163,3 +161,4 @@ The server can send a periodic status report to a Telegram chat.
 | `notifications_enabled` | Can also be toggled from the dashboard |
 
 Restart the server after editing. You can also toggle notifications on/off from the dashboard without restarting.
+

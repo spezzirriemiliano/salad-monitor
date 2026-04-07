@@ -160,9 +160,9 @@ def format_report(
 
         salad_str = "ON " if salad_on else "OFF"
         line1 = f"{icon} <code>{_short_id(machine_id):<10}</code> {salad_str}{earn_str}{last_seen_str}"
-        line2 = f"      {gpu_str}"
         lines.append(line1)
-        lines.append(line2)
+        if gpus:
+            lines.append(f"      {gpu_str}")
 
     # ── Summary ──────────────────────────────────────────────────
     lines.append("")

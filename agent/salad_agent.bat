@@ -70,7 +70,7 @@ $ApiKey          = $cfg.api_key
 $IntervalSeconds = if ($cfg.interval_seconds) { [int]$cfg.interval_seconds } else { 60 }
 $CachedSaladMachineId = $cfg.salad_machine_id
 
-$Version = "v0.1"
+$Version = "v0.2"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
@@ -142,6 +142,8 @@ function Is-SaladRunning {
 function Get-GpuMetrics {
     $gpus = [System.Collections.ArrayList]@()
 
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return $gpus }
+
     # Single call for all GPU metrics
     $fields = "index,name,utilization.gpu,temperature.gpu,temperature.memory," +
               "memory.used,memory.total,power.draw,power.limit,fan.speed," +
@@ -149,11 +151,11 @@ function Get-GpuMetrics {
               "ecc.errors.uncorrected.volatile.total," +
               "clocks.current.sm,clocks.max.sm,clocks.current.memory,clocks.max.memory"
 
-    $rows = & nvidia-smi --query-gpu=$fields --format=csv,noheader,nounits 2>$null
+    try { $rows = & nvidia-smi --query-gpu=$fields --format=csv,noheader,nounits 2>$null } catch { return $gpus }
     if (-not $rows) { return $gpus }
 
     # Single call for all compute processes across all GPUs
-    $computeProcs = & nvidia-smi --query-compute-apps=gpu_index,process_name --format=csv,noheader 2>$null
+    try { $computeProcs = & nvidia-smi --query-compute-apps=gpu_index,process_name --format=csv,noheader 2>$null } catch { $computeProcs = @() }
 
     # Build map: gpu_index -> [process_names]
     $procsByGpu = @{}

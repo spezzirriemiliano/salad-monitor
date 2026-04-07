@@ -15,5 +15,8 @@
   "salad_api": {
     "auth_cookie": "",
     "cf_clearance": ""
+  },
+  "dashboard": {
+    "password_hash": ""
   }
 }

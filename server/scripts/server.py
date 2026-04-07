@@ -3,9 +3,11 @@ Salad Monitor - Central Server
 Receives metrics from all agents and sends consolidated Telegram messages.
 """
 
+import hashlib
 import json
 import logging
 import os
+import secrets
 import socket
 import time
 import threading
@@ -14,15 +16,20 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests as req_lib
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from telegram_notifier import send_telegram_report
 
-VERSION = "v0.1"
+VERSION = "v0.2"
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
 app = Flask(__name__)
+
+# Auth: active session tokens { token: expiry_timestamp }
+active_sessions: dict = {}
+sessions_lock = threading.Lock()
+SESSION_MAX_AGE = 10 * 365 * 24 * 3600  # 10 years — effectively no expiry
 
 # Thread-safe store: { machine_id: latest_metrics_dict }
 metrics_store: dict = {}
@@ -263,6 +270,109 @@ def check_api_key():
     return key == API_KEY
 
 
+# ── Auth helpers ─────────────────────────────────────────────
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256((salt + password).encode()).hexdigest()
+    return f"{salt}:{h}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        salt, h = stored_hash.split(":", 1)
+        return hashlib.sha256((salt + password).encode()).hexdigest() == h
+    except Exception:
+        return False
+
+
+def _is_authenticated() -> bool:
+    token = request.cookies.get("sm_session")
+    if not token:
+        return False
+    now = time.time()
+    with sessions_lock:
+        expiry = active_sessions.get(token)
+    return expiry is not None and now < expiry
+
+
+def _password_configured() -> bool:
+    return bool(config.get("dashboard", {}).get("password_hash", "").strip())
+
+
+def _require_auth():
+    """Returns a 401 response if not authenticated, else None."""
+    if not _is_authenticated():
+        return jsonify({"error": "Unauthorized"}), 401
+    return None
+
+
+@app.route("/api/setup", methods=["POST"])
+def setup_password():
+    if _password_configured():
+        return jsonify({"error": "Already configured"}), 403
+    data = request.get_json(silent=True) or {}
+    password = data.get("password", "").strip()
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    hashed = _hash_password(password)
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = json.load(f)
+        cfg.setdefault("dashboard", {})["password_hash"] = hashed
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+        config["dashboard"] = cfg["dashboard"]
+    except Exception as e:
+        return jsonify({"error": f"Could not save config: {e}"}), 500
+    token = secrets.token_hex(32)
+    expiry = time.time() + SESSION_MAX_AGE
+    with sessions_lock:
+        active_sessions[token] = expiry
+    resp = make_response(jsonify({"ok": True}))
+    resp.set_cookie("sm_session", token, httponly=True, max_age=SESSION_MAX_AGE)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Dashboard password set up")
+    return resp
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    if not _password_configured():
+        return jsonify({"error": "Not configured"}), 403
+    data = request.get_json(silent=True) or {}
+    password = data.get("password", "")
+    stored = config.get("dashboard", {}).get("password_hash", "")
+    if not _verify_password(password, stored):
+        return jsonify({"error": "Invalid password"}), 401
+    token = secrets.token_hex(32)
+    expiry = time.time() + SESSION_MAX_AGE
+    with sessions_lock:
+        active_sessions[token] = expiry
+    resp = make_response(jsonify({"ok": True}))
+    resp.set_cookie("sm_session", token, httponly=True, max_age=SESSION_MAX_AGE)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Dashboard login from {request.remote_addr}")
+    return resp
+
+
+@app.route("/api/logout", methods=["POST"])
+def logout():
+    token = request.cookies.get("sm_session")
+    if token:
+        with sessions_lock:
+            active_sessions.pop(token, None)
+    resp = make_response(jsonify({"ok": True}))
+    resp.set_cookie("sm_session", "", expires=0)
+    return resp
+
+
+@app.route("/api/auth_status", methods=["GET"])
+def auth_status():
+    return jsonify({
+        "authenticated": _is_authenticated(),
+        "setup_required": not _password_configured(),
+    })
+
+
 @app.route("/report", methods=["POST"])
 def receive_report():
     if not check_api_key():
@@ -322,7 +432,8 @@ def receive_report():
 
 @app.route("/status", methods=["GET"])
 def get_status():
-    """Quick web view of current state (optional, no auth for convenience)."""
+    err = _require_auth()
+    if err: return err
     with store_lock:
         snapshot = dict(metrics_store)
 
@@ -354,6 +465,8 @@ def dashboard():
 
 @app.route("/api/dashboard")
 def api_dashboard():
+    err = _require_auth()
+    if err: return err
     with store_lock:
         snapshot = dict(metrics_store)
 
@@ -451,6 +564,8 @@ def api_dashboard():
 
 @app.route("/api/telegram", methods=["GET"])
 def get_telegram_status():
+    err = _require_auth()
+    if err: return err
     with telegram_enabled_lock:
         return jsonify({"enabled": telegram_enabled})
 
@@ -480,6 +595,8 @@ def save_telegram_enabled(state: bool):
 
 @app.route("/api/telegram", methods=["POST"])
 def set_telegram_status():
+    err = _require_auth()
+    if err: return err
     global telegram_enabled
     data = request.get_json(silent=True) or {}
     with telegram_enabled_lock:
