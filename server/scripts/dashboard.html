@@ -276,7 +276,28 @@
 
     /* ── View levels ── */
     .extra { display: none; flex-direction: column; gap: 6px; }
-    #grid.view-detailed .extra { display: flex; }
+    #grid.view-detailed .extra,
+    #grid.view-detailed-net .extra     { display: flex; }
+    #grid.view-detailed-net .net-section { display: flex; }
+    #grid.view-detailed-net .net-summary-row { display: none; }
+    .net-section { display: none; flex-direction: column; gap: 6px; }
+    .arr-up { color: var(--green); }
+    .arr-dn { color: #58a6ff; }
+    .net-info-btn {
+      cursor: pointer; user-select: none;
+      color: var(--yellow); font-size: 10px;
+      opacity: .8; white-space: nowrap; flex-shrink: 0;
+    }
+    .net-info-btn:hover { opacity: 1; text-decoration: underline; }
+    .net-tooltip {
+      display: none; position: absolute; right: 0; top: 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px;
+      font-size: 11px; color: var(--muted); line-height: 1.5;
+      width: 220px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,.5);
+    }
+    .net-tooltip.visible { display: block; }
+    .net-tooltip-warn { color: var(--yellow); font-weight: bold; margin-bottom: 6px; display: block; }
     #grid.view-compact .normal-only { display: none !important; }
     #grid.view-compact .card { padding: 10px 12px; gap: 6px; }
     .compact-only { display: none; }
@@ -736,6 +757,7 @@
       <option value="0">Compact</option>
       <option value="1">Normal</option>
       <option value="2">Detailed</option>
+      <option value="3">Detailed + Network</option>
     </select>
   </div>
 </div>
@@ -867,8 +889,8 @@
 
   function applyView() {
     const grid = document.getElementById('grid');
-    grid.classList.remove('view-compact', 'view-normal', 'view-detailed');
-    grid.classList.add(['view-compact', 'view-normal', 'view-detailed'][viewLevel]);
+    grid.classList.remove('view-compact', 'view-normal', 'view-detailed', 'view-detailed-net');
+    grid.classList.add(['view-compact', 'view-normal', 'view-detailed', 'view-detailed-net'][viewLevel]);
     const sel = document.getElementById('view-select');
     if (sel) sel.value = viewLevel;
     document.querySelectorAll('.view-btn').forEach((btn, i) => {
@@ -931,6 +953,96 @@
         <div class="bar-wrap"><div class="bar-fill ${color}" style="width:${w}%"></div></div>
         <span class="val ${color === 'red' ? 'crit' : color === 'orange' ? 'hot' : color === 'yellow' ? 'warm' : 'ok'}">${valStr}</span>
       </div>`;
+  }
+
+  function fmtMB(v) {
+    if (v == null) return '—';
+    if (v >= 1024) return `${(v / 1024).toFixed(2)} GB`;
+    return `${v.toFixed(1)} MB`;
+  }
+
+  function renderNetwork(m) {
+    const bw     = m.bandwidth || {};
+    const totals = m.bandwidth_totals || {};
+    const fmtMbps = v => v != null ? `${v.toFixed(2)} Mbps` : '—';
+
+    const up = `<span class="arr-up">⬆</span>`;
+    const dn = `<span class="arr-dn">⬇</span>`;
+
+    let html = `<hr class="divider"><div class="section-label">Network</div>`;
+    html += `
+      <div class="row">
+        <span class="label">Download</span>
+        <span class="val" style="color:#9bc9ff">${fmtMbps(bw.download_mbps)} ${dn}</span>
+      </div>
+      <div class="row">
+        <span class="label">Upload</span>
+        <span class="val" style="color:#80bf89">${fmtMbps(bw.upload_mbps)} ${up}</span>
+      </div>`;
+
+    const fmtMBFixed = v => {
+      if (v == null) return '—';
+      if (v >= 1024) return `${(v / 1024).toFixed(2)} GB`;
+      return `${v.toFixed(2)} MB`;
+    };
+
+    const periods = [
+      { key: '15m', label: 'Last 15m' },
+      { key: '1h',  label: 'Last 1h'  },
+      { key: '24h', label: 'Last 24h' },
+    ];
+    html += `<div style="display:grid;grid-template-columns:auto auto 1fr auto 1fr auto;gap:3px 5px;align-items:center;font-variant-numeric:tabular-nums;font-family:monospace;font-size:11px">`;
+    for (const p of periods) {
+      const t = totals[p.key] || {};
+      html += `
+        <span class="label" style="font-family:inherit">${p.label}</span>
+        <span style="color:var(--muted)">≈</span>
+        <span style="color:#9bc9ff;text-align:right">${fmtMBFixed(t.downloaded_mb)}</span>
+        <span>${dn}</span>
+        <span style="color:#80bf89;text-align:right">${fmtMBFixed(t.uploaded_mb)}</span>
+        <span>${up}</span>`;
+    }
+    html += `</div>`;
+    html += `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:2px">
+        <span style="color:var(--orange);font-size:10px">Values are approximate and may differ from reality.</span>
+        <div style="position:relative;flex-shrink:0">
+          <span class="net-info-btn" onclick="this.nextElementSibling.classList.toggle('visible')">+ info</span>
+          <div class="net-tooltip">
+            <span class="net-tooltip-warn">⚠ Values are approximate and may differ from reality.</span>
+            Speeds are measured by comparing network adapter counters between reports (~60s intervals).<br><br>
+            Totals include <b>all</b> traffic on the active adapter, not just Salad.
+          </div>
+        </div>
+      </div>`;
+    return html;
+  }
+
+  function renderBandwidth(bw) {
+    if (!bw) return '<div class="never-text">No bandwidth data</div>';
+    const fmtMbps = v => v != null ? `${v.toFixed(2)} Mbps` : '—';
+    const fmtMB   = v => v != null ? (v >= 1000 ? `${(v/1024).toFixed(2)} GB` : `${v.toFixed(1)} MB`) : '—';
+    let html = `<div class="section-label">📡 Bandwidth</div>`;
+    html += `
+      <div class="row">
+        <span class="label">Download</span>
+        <span class="val" style="color:#9bc9ff">${fmtMbps(bw.download_mbps)} <span class="arr-dn">⬇</span></span>
+      </div>
+      <div class="row">
+        <span class="label">Upload</span>
+        <span class="val" style="color:#80bf89">${fmtMbps(bw.upload_mbps)} <span class="arr-up">⬆</span></span>
+      </div>`;
+    html += `<div class="extra" style="flex-direction:column;gap:6px;margin-top:4px">
+      <div class="row">
+        <span class="label">Session</span>
+        <span class="val" style="color:#9bc9ff">${fmtMB(bw.session_downloaded_mb)} <span class="arr-dn">⬇</span></span>
+      </div>
+      <div class="row">
+        <span class="label">Session</span>
+        <span class="val" style="color:#80bf89">${fmtMB(bw.session_uploaded_mb)} <span class="arr-up">⬆</span></span>
+      </div>
+    </div>`;
+    return html;
   }
 
   function renderGpu(g) {
@@ -1159,6 +1271,7 @@ const gpuHot = machines.filter(m => {
     const saladClass = m.salad_running ? 'on' : 'off';
     const saladText  = m.salad_running ? 'Salad ON' : 'Salad OFF';
     const gpu = m.gpus && m.gpus.length > 0 ? m.gpus[0] : null;
+    const isBandwidth = m.mode === 'bandwidth';
 
     let html = `<div class="card ${m.status}${noEarning ? ' no-earning' : ''}">`;
 
@@ -1166,6 +1279,7 @@ const gpuHot = machines.filter(m => {
     const gpuTemp = gpu ? gpu.temperature_c : null;
     const hotGpu  = gpuTemp != null && gpuTemp >= 80;
     const fireHtml = hotGpu ? `<span style="font-size:14px">🔥</span>` : '';
+    const bwBadge  = isBandwidth ? `<span class="salad-badge on" style="background:rgba(88,164,255,.12);color:#9bc9ff;border-color:rgba(88,164,255,.35)">BW</span>` : '';
     const earnHtml = m.earning_rate != null
       ? `<span class="earning-badge ${m.earning_rate < 0.001 ? 'zero' : ''}">💰 $${m.earning_rate.toFixed(2)}/hr</span>`
       : '';
@@ -1175,8 +1289,8 @@ const gpuHot = machines.filter(m => {
           <span style="font-size:14px">${statusIcon}</span>
           <div class="card-header-badges">
             ${fireHtml}${earnHtml}
-            <span class="salad-badge ${saladClass} normal-only">${saladText}</span>
-            <span class="salad-badge ${saladClass} compact-only">${m.salad_running ? 'ON' : 'OFF'}</span>
+            ${bwBadge}<span class="salad-badge ${saladClass} normal-only">${saladText}</span>
+            ${bwBadge}<span class="salad-badge ${saladClass} compact-only">${m.salad_running ? 'ON' : 'OFF'}</span>
           </div>
         </div>
         <span class="machine-id">${m.machine_id}</span>
@@ -1192,8 +1306,13 @@ const gpuHot = machines.filter(m => {
 
     html += `<hr class="divider normal-only">`;
 
-    // GPU
-    html += `<div class="normal-only">${renderGpu(gpu)}</div>`;
+    // GPU or Bandwidth (full section)
+    html += `<div class="normal-only">${isBandwidth ? renderBandwidth(m.bandwidth) : renderGpu(gpu)}</div>`;
+
+    // Network speed row (always shown in detail view when not already in bandwidth section)
+    const bwUp = m.bandwidth?.upload_mbps;
+    const bwDn = m.bandwidth?.download_mbps;
+    const hasBwData = bwUp != null || bwDn != null;
 
     // Sistema (en detalle)
     html += `<div class="extra" style="flex-direction:column;gap:6px">`;
@@ -1205,12 +1324,24 @@ const gpuHot = machines.filter(m => {
       : `${fmt(m.ram_used_pct)}%`;
     html += barRow('RAM', m.ram_used_pct, ramStr, barColor);
     html += barRow('Disk', m.disk_used_pct, `${fmt(m.disk_used_pct)}%`, barColor);
+    if (hasBwData && !isBandwidth) {
+      const upStr = `<span style="color:#80bf89">${bwUp != null ? bwUp.toFixed(2) : '—'} Mbps</span> <span class="arr-up">⬆</span>`;
+      const dnStr = `<span style="color:#9bc9ff">${bwDn != null ? bwDn.toFixed(2) : '—'} Mbps</span> <span class="arr-dn">⬇</span>`;
+      html += `
+        <div class="row net-summary-row">
+          <span class="label">Network</span>
+          <span class="val">${dnStr}&nbsp;&nbsp;&nbsp;${upStr}</span>
+        </div>`;
+    }
     html += `
       <div class="row">
         <span class="label">Uptime</span>
         <span class="val">${uptimeFmt(m.uptime_hours)}</span>
       </div>`;
     html += `</div>`;
+
+    // Network section — only visible in "Detailed + Network" view
+    html += `<div class="net-section">${renderNetwork(m)}</div>`;
 
     html += `<hr class="divider normal-only">`;
     if (m.salad_version) {
@@ -1379,6 +1510,9 @@ const gpuHot = machines.filter(m => {
     const menu = document.getElementById('gear-menu');
     if (menu && !menu.contains(e.target)) {
       document.getElementById('gear-dropdown').classList.remove('open');
+    }
+    if (!e.target.closest('.net-info-btn')) {
+      document.querySelectorAll('.net-tooltip.visible').forEach(t => t.classList.remove('visible'));
     }
   });
 

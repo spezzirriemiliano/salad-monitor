@@ -162,3 +162,23 @@ The server can send a periodic status report to a Telegram chat.
 
 Restart the server after editing. You can also toggle notifications on/off from the dashboard without restarting.
 
+---
+
+## 5. Updating
+
+Each component has a self-update script that checks GitHub for a newer version and downloads all files automatically.
+
+**Server:** [`server_self_update.bat`](https://github.com/spezzirriemiliano/salad-monitor/raw/main/server/server_self_update.bat)
+
+**Agent:** [`agent_self_update.bat`](https://github.com/spezzirriemiliano/salad-monitor/raw/main/agent/agent_self_update.bat)
+
+**How it works:**
+
+1. Compares the local version against the latest version on GitHub
+2. If already up to date, exits with a message
+3. If a new version is available, shows the version numbers and asks `(y/n)` before downloading
+4. Downloads and overwrites all files in the folder **except config files**
+5. If `config.json` / `salad_agent_config.json` does not exist locally, it is downloaded as a starting template — if it already exists it is never touched
+
+> **Note:** Restart the server or agent after updating for the changes to take effect.
+

@@ -122,13 +122,23 @@ def format_report(
         else:
             icon = "🔴"
 
+        # Mode: bandwidth or gpu
+        mode = m.get("mode", "gpu")
+        bw   = m.get("bandwidth") or {}
+
         # GPU info
         gpus = m.get("gpus", [])
         if isinstance(gpus, dict):
             gpus = [gpus] if gpus else []
 
-        gpu_str = "GPU:N/A"
-        if gpus:
+        gpu_str = None
+        if mode == "bandwidth":
+            up = bw.get("upload_mbps")
+            dn = bw.get("download_mbps")
+            up_str = f"{up:.2f} Mbps" if up is not None else "—"
+            dn_str = f"{dn:.2f} Mbps" if dn is not None else "—"
+            gpu_str = f"📡 ↑ {up_str} | ↓ {dn_str}"
+        elif gpus:
             g = gpus[0]
             util = g.get("utilization_pct", 0)
             temp = g.get("temperature_c")
@@ -161,8 +171,16 @@ def format_report(
         salad_str = "ON " if salad_on else "OFF"
         line1 = f"{icon} <code>{_short_id(machine_id):<10}</code> {salad_str}{earn_str}{last_seen_str}"
         lines.append(line1)
-        if gpus:
+        if gpu_str:
             lines.append(f"      {gpu_str}")
+
+        # Network speed (always shown when available)
+        up = bw.get("upload_mbps")
+        dn = bw.get("download_mbps")
+        if up is not None or dn is not None:
+            up_str = f"{up:.2f}" if up is not None else "—"
+            dn_str = f"{dn:.2f}" if dn is not None else "—"
+            lines.append(f"      🌐 ↑ {up_str} | ↓ {dn_str} Mbps")
 
     # ── Summary ──────────────────────────────────────────────────
     lines.append("")

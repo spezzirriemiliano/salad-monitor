@@ -7,7 +7,9 @@ import re
 import json
 from pathlib import Path
 
-CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+_DEV_CONFIG     = Path(__file__).parent.parent / ".dev.config.json"
+_DEFAULT_CONFIG = Path(__file__).parent.parent / "config.json"
+CONFIG_PATH = _DEV_CONFIG if _DEV_CONFIG.exists() else _DEFAULT_CONFIG
 
 
 def print_instructions():

@@ -1,0 +1,15 @@
+server/.dev.config.json
+agent/.dev.salad_agent_config.json
+
+__pycache__/
+*.py[cod]
+*.pyo
+
+venv/
+.venv/
+
+*.log
+
+.DS_Store
+Thumbs.db
+desktop.ini

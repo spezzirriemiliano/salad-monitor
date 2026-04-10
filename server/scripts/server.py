@@ -21,8 +21,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from telegram_notifier import send_telegram_report
 
-VERSION = "v0.2"
-CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+VERSION = "v0.3"
+_DEV_CONFIG     = Path(__file__).parent.parent / ".dev.config.json"
+_DEFAULT_CONFIG = Path(__file__).parent.parent / "config.json"
+CONFIG_PATH = _DEV_CONFIG if _DEV_CONFIG.exists() else _DEFAULT_CONFIG
 
 app = Flask(__name__)
 
@@ -55,6 +57,11 @@ latest_version_lock = threading.Lock()
 # Earnings history: { "24h": float, "30d": float }
 earnings_history: dict = {}
 earnings_history_lock = threading.Lock()
+
+# Bandwidth history: { machine_id: deque([{ uploaded_mb, downloaded_mb, ts }]) }
+bandwidth_history: dict = {}
+bandwidth_history_lock = threading.Lock()
+BW_HISTORY_MAXLEN = 1440  # 24h at 60s intervals
 
 # Balance: { "current": float, "lifetime": float }
 balance_cache: dict = {}
@@ -249,6 +256,32 @@ def is_job_active(machine_id: str, salad_running: bool) -> bool:
     return avg >= JOB_GPU_THRESHOLD
 
 
+def _bw_totals(history_deque, now):
+    """Sums uploaded/downloaded MB for the last 15m, 1h and 24h from a bandwidth deque."""
+    up_15m = dn_15m = up_1h = dn_1h = up_24h = dn_24h = 0.0
+    cutoff_15m = now - timedelta(minutes=15)
+    cutoff_1h  = now - timedelta(hours=1)
+    cutoff_24h = now - timedelta(hours=24)
+    for entry in history_deque:
+        try:
+            ts = datetime.fromisoformat(entry["ts"])
+            up = entry["uploaded_mb"]
+            dn = entry["downloaded_mb"]
+            if ts >= cutoff_24h:
+                up_24h += up; dn_24h += dn
+            if ts >= cutoff_1h:
+                up_1h  += up; dn_1h  += dn
+            if ts >= cutoff_15m:
+                up_15m += up; dn_15m += dn
+        except Exception:
+            pass
+    return {
+        "15m": {"uploaded_mb": round(up_15m, 1), "downloaded_mb": round(dn_15m, 1)},
+        "1h":  {"uploaded_mb": round(up_1h,  1), "downloaded_mb": round(dn_1h,  1)},
+        "24h": {"uploaded_mb": round(up_24h, 1), "downloaded_mb": round(dn_24h, 1)},
+    }
+
+
 def load_config():
     if not CONFIG_PATH.exists():
         print(f"[ERROR] config.json not found. Copy config.example.json and edit it.")
@@ -400,6 +433,21 @@ def receive_report():
                 gpu_history[machine_id] = deque(maxlen=GPU_HISTORY_SIZE)
             gpu_history[machine_id].append(gpu_util)
 
+    # Update bandwidth history
+    bw = data.get("bandwidth") or {}
+    interval_up = bw.get("interval_uploaded_mb")
+    interval_dn = bw.get("interval_downloaded_mb")
+    if interval_up is not None and interval_dn is not None:
+        entry = {
+            "uploaded_mb":   interval_up,
+            "downloaded_mb": interval_dn,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        with bandwidth_history_lock:
+            if machine_id not in bandwidth_history:
+                bandwidth_history[machine_id] = deque(maxlen=BW_HISTORY_MAXLEN)
+            bandwidth_history[machine_id].append(entry)
+
     # Auto-register new machines and update salad_machine_id if available
     salad_mid = data.get("salad_machine_id")
     with expected_machines_lock:
@@ -478,6 +526,9 @@ def api_dashboard():
     with earnings_lock:
         e_snap = dict(earnings_cache)
 
+    with bandwidth_history_lock:
+        bw_hist_snap = {mid: list(h) for mid, h in bandwidth_history.items()}
+
     machines = []
     for mid in all_ids:
         m = snapshot.get(mid)
@@ -516,6 +567,7 @@ def api_dashboard():
             "salad_running": salad_on,
             "job_active": job_on,
             "gpu_avg": gpu_avg,
+            "mode": m.get("mode", "gpu"),
             "cpu_pct": m.get("cpu_pct"),
             "ram_used_pct": m.get("ram_used_pct"),
             "ram_used_gb": m.get("ram_used_gb"),
@@ -528,6 +580,8 @@ def api_dashboard():
             "salad_machine_id": m.get("salad_machine_id"),
             "last_seen": received_at,
             "gpus": gpus,
+            "bandwidth": m.get("bandwidth"),
+            "bandwidth_totals": _bw_totals(bw_hist_snap[mid], now) if mid in bw_hist_snap else None,
             "earning_rate": e_snap.get(mid),
         })
 

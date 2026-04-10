@@ -24,7 +24,8 @@ param([switch]$Install, [switch]$Uninstall)
 
 $ScriptPath  = $env:BAT_PATH
 $ScriptDir   = Split-Path $ScriptPath
-$ConfigPath  = Join-Path $ScriptDir "salad_agent_config.json"
+$DevConfigPath = Join-Path $ScriptDir ".dev.salad_agent_config.json"
+$ConfigPath    = if (Test-Path $DevConfigPath) { $DevConfigPath } else { Join-Path $ScriptDir "salad_agent_config.json" }
 $TaskName    = "SaladMonitorAgent"
 
 # ── Install / uninstall scheduled task ──────────────────────
@@ -70,7 +71,7 @@ $ApiKey          = $cfg.api_key
 $IntervalSeconds = if ($cfg.interval_seconds) { [int]$cfg.interval_seconds } else { 60 }
 $CachedSaladMachineId = $cfg.salad_machine_id
 
-$Version = "v0.2"
+$Version = "v0.3"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
@@ -137,6 +138,48 @@ function Is-SaladRunning {
         if (Get-Process -Name $name -ErrorAction SilentlyContinue) { return $true }
     }
     return $false
+}
+
+function Get-ActiveAdapterName {
+    $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+             Sort-Object RouteMetric | Select-Object -First 1
+    if (-not $route) { return $null }
+    $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue |
+               Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    return $adapter.Name
+}
+
+function Get-BandwidthMetrics {
+    param($PrevSample)
+    $result = @{ upload_mbps = $null; download_mbps = $null
+                 delta_uploaded_mb = $null; delta_downloaded_mb = $null
+                 current_sample = $null }
+
+    $adapterName = Get-ActiveAdapterName
+    if (-not $adapterName) { return $result }
+
+    $stats = Get-NetAdapterStatistics -Name $adapterName -ErrorAction SilentlyContinue
+    if (-not $stats) { return $result }
+
+    $now     = Get-Date
+    $current = @{ AdapterName = $adapterName
+                  SentBytes     = $stats.SentBytes
+                  ReceivedBytes = $stats.ReceivedBytes
+                  Time          = $now }
+    $result.current_sample = $current
+
+    if ($PrevSample -and $PrevSample.AdapterName -eq $adapterName) {
+        $elapsed = ($now - $PrevSample.Time).TotalSeconds
+        if ($elapsed -gt 1) {
+            $sentDelta = [Math]::Max(0, $stats.SentBytes     - $PrevSample.SentBytes)
+            $recvDelta = [Math]::Max(0, $stats.ReceivedBytes - $PrevSample.ReceivedBytes)
+            $result.upload_mbps         = [Math]::Round($sentDelta * 8 / $elapsed / 1MB, 2)
+            $result.download_mbps       = [Math]::Round($recvDelta * 8 / $elapsed / 1MB, 2)
+            $result.delta_uploaded_mb   = [Math]::Round($sentDelta / 1MB, 3)
+            $result.delta_downloaded_mb = [Math]::Round($recvDelta / 1MB, 3)
+        }
+    }
+    return $result
 }
 
 function Get-GpuMetrics {
@@ -322,17 +365,31 @@ if ($CachedSaladMachineId) {
 
 # ── Main loop ────────────────────────────────────────────────
 
+$PrevNetSample       = $null
+$SessionUploadedMB   = 0.0
+$SessionDownloadedMB = 0.0
+
 while ($true) {
     try {
-        $sys  = Get-SystemMetrics
-        $gpus = Get-GpuMetrics
+        $sys          = Get-SystemMetrics
+        $gpus         = Get-GpuMetrics
         $saladRunning = Is-SaladRunning
+        $oxyRunning   = $null -ne (Get-Process -Name "oxy" -ErrorAction SilentlyContinue)
+        $mode         = if ($oxyRunning) { "bandwidth" } elseif ($saladRunning) { "gpu" } else { "idle" }
+
+        $bw = Get-BandwidthMetrics -PrevSample $PrevNetSample
+        $PrevNetSample = $bw.current_sample
+        if ($null -ne $bw.delta_uploaded_mb) {
+            $SessionUploadedMB   += $bw.delta_uploaded_mb
+            $SessionDownloadedMB += $bw.delta_downloaded_mb
+        }
 
         $payload = [PSCustomObject]@{
             machine_id    = $MachineId
             hostname      = $env:COMPUTERNAME
             timestamp     = (Get-Date -Format "o")
             salad_running = $saladRunning
+            mode          = $mode
             cpu_pct       = $sys.cpu_pct
             ram_used_pct  = $sys.ram_used_pct
             ram_used_gb   = $sys.ram_used_gb
@@ -343,19 +400,34 @@ while ($true) {
             salad_version     = $SaladVersion
             salad_machine_id  = $SaladMachineId
             gpus              = @($gpus)
+            bandwidth     = [PSCustomObject]@{
+                upload_mbps            = $bw.upload_mbps
+                download_mbps          = $bw.download_mbps
+                session_uploaded_mb    = [Math]::Round($SessionUploadedMB,   1)
+                session_downloaded_mb  = [Math]::Round($SessionDownloadedMB, 1)
+                interval_uploaded_mb   = $bw.delta_uploaded_mb
+                interval_downloaded_mb = $bw.delta_downloaded_mb
+            }
         }
 
         $ok = Send-Metrics $payload
         $status = if ($ok) { "OK" } else { "FAIL" }
         $salad  = if ($saladRunning) { "ON" } else { "OFF" }
-        $gpuInfo = ""
-        $gpuArr = @($gpus)
-        if ($gpuArr.Count -gt 0) {
-            $g = $gpuArr[0]
-            $gpuInfo = " | GPU:$($g.utilization_pct)% Temp:$($g.temperature_c)C Fan:$($g.fan_speed_pct)%"
-        }
+        $modeInfo = " | Mode:$mode"
         $ts = Get-Date -Format "HH:mm:ss"
-        Write-Host "[$ts] [$status] Salad:$salad CPU:$($sys.cpu_pct)%$gpuInfo"
+        if ($mode -eq "bandwidth") {
+            $upStr = if ($null -ne $bw.upload_mbps)   { "$($bw.upload_mbps) Mbps" }   else { "—" }
+            $dnStr = if ($null -ne $bw.download_mbps) { "$($bw.download_mbps) Mbps" } else { "—" }
+            Write-Host "[$ts] [$status] Salad:$salad CPU:$($sys.cpu_pct)%$modeInfo | ↑$upStr ↓$dnStr"
+        } else {
+            $gpuInfo = ""
+            $gpuArr = @($gpus)
+            if ($gpuArr.Count -gt 0) {
+                $g = $gpuArr[0]
+                $gpuInfo = " | GPU:$($g.utilization_pct)% Temp:$($g.temperature_c)C Fan:$($g.fan_speed_pct)%"
+            }
+            Write-Host "[$ts] [$status] Salad:$salad CPU:$($sys.cpu_pct)%$modeInfo$gpuInfo"
+        }
 
     } catch {
         Write-Host "[ERROR] $_"
