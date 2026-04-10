@@ -172,6 +172,16 @@ Each component has a self-update script that checks GitHub for a newer version a
 
 **Agent:** [`agent_self_update.bat`](https://github.com/spezzirriemiliano/salad-monitor/raw/main/agent/agent_self_update.bat)
 
+Or download directly via PowerShell:
+
+```powershell
+# Server (run inside the server/ folder)
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/spezzirriemiliano/salad-monitor/main/server/server_self_update.bat" -OutFile "server_self_update.bat"
+
+# Agent (run inside the agent/ folder)
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/spezzirriemiliano/salad-monitor/main/agent/agent_self_update.bat" -OutFile "agent_self_update.bat"
+```
+
 **How it works:**
 
 1. Compares the local version against the latest version on GitHub
