@@ -68,10 +68,10 @@ $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 $MachineId       = if ($cfg.machine_id) { $cfg.machine_id } else { $env:COMPUTERNAME }
 $ServerUrl       = $cfg.server_url.TrimEnd("/")
 $ApiKey          = $cfg.api_key
-$IntervalSeconds = if ($cfg.interval_seconds) { [int]$cfg.interval_seconds } else { 60 }
+$IntervalSeconds = if ($cfg.interval_seconds) { [int][Math]::Min([long]$cfg.interval_seconds, [int]::MaxValue) } else { 60 }
 $CachedSaladMachineId = $cfg.salad_machine_id
 
-$Version = "v0.3"
+$Version = "v0.4"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
@@ -104,8 +104,8 @@ function NvVal($raw) {
 function NvInt($raw) {
     $v = NvVal $raw
     if ($null -eq $v) { return $null }
-    $n = 0
-    if ([int]::TryParse($v, [ref]$n)) { return $n }
+    $n = [long]0
+    if ([long]::TryParse($v, [ref]$n)) { return $n }
     return $null
 }
 
@@ -171,8 +171,8 @@ function Get-BandwidthMetrics {
     if ($PrevSample -and $PrevSample.AdapterName -eq $adapterName) {
         $elapsed = ($now - $PrevSample.Time).TotalSeconds
         if ($elapsed -gt 1) {
-            $sentDelta = [Math]::Max(0, $stats.SentBytes     - $PrevSample.SentBytes)
-            $recvDelta = [Math]::Max(0, $stats.ReceivedBytes - $PrevSample.ReceivedBytes)
+            $sentDelta = [Math]::Max([long]0, $stats.SentBytes     - $PrevSample.SentBytes)
+            $recvDelta = [Math]::Max([long]0, $stats.ReceivedBytes - $PrevSample.ReceivedBytes)
             $result.upload_mbps         = [Math]::Round($sentDelta * 8 / $elapsed / 1MB, 2)
             $result.download_mbps       = [Math]::Round($recvDelta * 8 / $elapsed / 1MB, 2)
             $result.delta_uploaded_mb   = [Math]::Round($sentDelta / 1MB, 3)
@@ -318,9 +318,6 @@ function Send-Metrics($payload) {
 $CpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
 
 $SaladExe = "C:\Program Files\Salad\Salad.exe"
-$SaladVersion = if (Test-Path $SaladExe) {
-    try { (Get-Item $SaladExe).VersionInfo.FileVersion } catch { $null }
-} else { $null }
 
 if ($CachedSaladMachineId) {
     # Already saved in config, use it directly
@@ -376,6 +373,10 @@ while ($true) {
         $saladRunning = Is-SaladRunning
         $oxyRunning   = $null -ne (Get-Process -Name "oxy" -ErrorAction SilentlyContinue)
         $mode         = if ($oxyRunning) { "bandwidth" } elseif ($saladRunning) { "gpu" } else { "idle" }
+
+        $SaladVersion = if (Test-Path $SaladExe) {
+            try { (Get-Item $SaladExe).VersionInfo.FileVersion } catch { $null }
+        } else { $null }
 
         $bw = Get-BandwidthMetrics -PrevSample $PrevNetSample
         $PrevNetSample = $bw.current_sample

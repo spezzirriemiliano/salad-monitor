@@ -1,5 +1,7 @@
 server/.dev.config.json
 agent/.dev.salad_agent_config.json
+server/machines-stats/
+.claude/
 
 __pycache__/
 *.py[cod]

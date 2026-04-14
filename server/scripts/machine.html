@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Machine — Salad Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --green:   #3fb950;
+      --yellow:  #d29922;
+      --orange:  #e3742b;
+      --red:     #f85149;
+      --blue:    #58a6ff;
+      --purple:  #bc8cff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Auth overlay ── */
+    #auth-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    #auth-overlay.visible { display: flex; }
+    .auth-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .auth-box h2 { font-size: 18px; font-weight: 600; }
+    .auth-box p  { color: var(--muted); font-size: 12px; }
+    .auth-box input[type=password] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 14px;
+      outline: none;
+    }
+    .auth-box input[type=password]:focus { border-color: var(--blue); }
+    .auth-box button.primary {
+      background: var(--blue);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+    .auth-box button.primary:hover { opacity: 0.85; }
+    .auth-error { color: var(--red); font-size: 12px; min-height: 16px; }
+
+    /* ── Header ── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #header-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #header-bottom {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .back-btn {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      text-decoration: none;
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .back-btn:hover { background: #30363d; color: var(--text); }
+    #page-machine-id {
+      font-size: 15px;
+      font-weight: 700;
+      font-family: monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #page-status-dot {
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    #header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    #last-update { color: var(--muted); font-size: 12px; }
+    #refresh-btn {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background .15s;
+    }
+    #refresh-btn:hover { background: #30363d; }
+
+    /* ── Main layout ── */
+    main {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── Info card ── */
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .info-card-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .info-card:not(.collapsed) .info-card-title {
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .info-card-title:hover { color: var(--text); }
+    .chevron {
+      font-size: 10px;
+      transition: transform .2s ease;
+      flex-shrink: 0;
+      transform: rotate(90deg);
+    }
+    .info-card:not(.collapsed) .chevron       { transform: rotate(270deg); }
+    .chart-section .chevron                   { transform: rotate(90deg); }
+    .chart-section.collapsed .chevron         { transform: rotate(90deg); }
+    .chart-section:not(.collapsed) .chevron   { transform: rotate(270deg); }
+    .info-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .info-card.collapsed .info-card-body { display: none; }
+
+    /* ── Rows ── */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .row .label { color: var(--muted); min-width: 56px; }
+    .row .val   { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+    .ok   { color: var(--text); }
+    .warm { color: var(--yellow); }
+    .hot  { color: var(--orange); }
+    .crit { color: var(--red); }
+    .good { color: var(--green); }
+    .info { color: var(--blue); }
+
+    /* ── Progress bar ── */
+    .bar-wrap {
+      flex: 1;
+      height: 5px;
+      background: #21262d;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--blue);
+      transition: width .4s ease;
+    }
+    .bar-fill.green   { background: var(--green); }
+    .bar-fill.yellow  { background: var(--yellow); }
+    .bar-fill.orange  { background: var(--orange); }
+    .bar-fill.red     { background: var(--red); }
+    .bar-fill.neutral { background: #4a5568; }
+
+    /* ── Status badge ── */
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 10px;
+    }
+    .status-badge.online  { background: rgba(63,185,80,.15);  color: var(--green); }
+    .status-badge.offline { background: rgba(248,81,73,.15);  color: var(--red); }
+    .status-badge.stale   { background: rgba(210,153,34,.15); color: var(--yellow); }
+
+    /* ── Tags ── */
+    .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .tag  {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #21262d;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .tag.warn { color: var(--yellow); border-color: var(--yellow); background: rgba(210,153,34,.1); }
+    .tag.crit { color: var(--red);    border-color: var(--red);    background: rgba(248,81,73,.1); }
+
+    /* ── Charts header ── */
+    .charts-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .charts-header .section-title { margin-bottom: 0; }
+    .range-select {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+    .range-select:hover { border-color: var(--muted); }
+
+    /* ── Earnings chart ── */
+    #earnings-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #earnings-section .chart-wrap { height: 180px; }
+    .earnings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .earnings-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .earnings-total {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green);
+      font-family: monospace;
+      font-variant-numeric: tabular-nums;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .earnings-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Chart sections ── */
+    #charts-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .chart-section {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chart-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .chart-section-title:hover { color: var(--text); }
+    .chart-section.collapsed .charts-grid { display: none; }
+
+    /* ── Charts ── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .chart-card-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .unit-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      background: #21262d;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 7px;
+      transition: border-color .15s, color .15s;
+    }
+    .unit-toggle:hover { border-color: var(--muted); color: var(--text); }
+    .unit-toggle input[type=checkbox] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border: 1.5px solid var(--muted);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+      transition: background .15s, border-color .15s;
+    }
+    .unit-toggle input[type=checkbox]:checked {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+    .unit-toggle input[type=checkbox]:checked::after {
+      content: '';
+      position: absolute;
+      left: 2px;
+      top: 0px;
+      width: 5px;
+      height: 8px;
+      border: 1.5px solid #000;
+      border-top: none;
+      border-left: none;
+      transform: rotate(45deg);
+    }
+    .chart-wrap { position: relative; height: 150px; }
+
+    /* ── Loading ── */
+    .loading-text {
+      text-align: center;
+      padding: 60px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <div id="auth-login" class="auth-box">
+    <h2>⚡ Salad Monitor</h2>
+    <p>Enter your password to continue.</p>
+    <input type="password" id="login-password" placeholder="Password"
+           onkeydown="if(event.key==='Enter')submitLogin()" />
+    <div class="auth-error" id="login-error"></div>
+    <button class="primary" onclick="submitLogin()">Log in</button>
+  </div>
+</div>
+
+<header>
+  <div id="header-top">
+    <a class="back-btn" href="/dashboard">← Dashboard</a>
+    <div id="header-right">
+      <span id="last-update">—</span>
+      <button id="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+    </div>
+  </div>
+  <div id="header-bottom">
+    <span id="page-status-dot">⚫</span>
+    <span id="page-machine-id">—</span>
+  </div>
+</header>
+
+<main id="main-content">
+  <div class="loading-text" id="main-loading">Loading...</div>
+</main>
+
+<script>
+  const machineId = new URLSearchParams(location.search).get('id') || '';
+  if (machineId) document.title = `${machineId} — Salad Monitor`;
+
+  // ── Auth ────────────────────────────────────────────────────
+
+  function showAuthOverlay() {
+    document.getElementById('auth-overlay').classList.add('visible');
+    setTimeout(() => document.getElementById('login-password').focus(), 50);
+  }
+
+  function hideAuthOverlay() {
+    document.getElementById('auth-overlay').classList.remove('visible');
+  }
+
+  async function checkAuth() {
+    const res  = await fetch('/api/auth_status');
+    const data = await res.json();
+    if (!data.authenticated) { showAuthOverlay(); return; }
+    init();
+  }
+
+  async function submitLogin() {
+    const pw  = document.getElementById('login-password').value;
+    const err = document.getElementById('login-error');
+    err.textContent = '';
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (res.ok) { hideAuthOverlay(); init(); }
+    else { err.textContent = 'Invalid password.'; document.getElementById('login-password').select(); }
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────
+
+  function fmt(v, dec = 0) {
+    if (v == null) return '—';
+    return dec > 0 ? Number(v).toFixed(dec) : Math.round(v);
+  }
+
+  function tempClass(t) {
+    if (t == null) return 'ok';
+    if (t >= 85) return 'crit';
+    if (t >= 80) return 'hot';
+    if (t >= 70) return 'warm';
+    return 'ok';
+  }
+
+  function barColor(pct) {
+    if (pct >= 95) return 'red';
+    if (pct >= 80) return 'orange';
+    if (pct >= 60) return 'yellow';
+    return 'green';
+  }
+
+  function barRow(label, pct, valStr, colorFn) {
+    const color = typeof colorFn === 'function' ? colorFn(pct) : colorFn;
+    const w = Math.min(100, Math.max(0, pct || 0));
+    const textClass = color === 'red' ? 'crit' : color === 'orange' ? 'hot' : color === 'yellow' ? 'warm' : 'ok';
+    return `<div class="row">
+      <span class="label">${label}</span>
+      <div class="bar-wrap"><div class="bar-fill ${color}" style="width:${w}%"></div></div>
+      <span class="val ${textClass}">${valStr}</span>
+    </div>`;
+  }
+
+  function timeAgo(isoStr) {
+    if (!isoStr) return '—';
+    const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+    if (diff < 60)   return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
+  }
+
+  function uptimeFmt(h) {
+    if (h == null) return '—';
+    const d = Math.floor(h / 24), rem = Math.round(h % 24);
+    return d > 0 ? `${d}d ${rem}h` : `${Math.round(h)}h`;
+  }
+
+  function fmtMbps(v) { return v != null ? `${Number(v).toFixed(2)} Mbps` : '—'; }
+  function fmtMB(v) {
+    if (v == null) return '—';
+    return v >= 1024 ? `${(v / 1024).toFixed(2)} GB` : `${Number(v).toFixed(1)} MB`;
+  }
+
+  // ── Collapsible card builder ────────────────────────────────
+  function card(title, bodyHtml, cardId) {
+    const collapsed = LS.get('card_' + cardId, true); // default: collapsed
+    return `<div class="info-card ${collapsed ? 'collapsed' : ''}">
+      <div class="info-card-title" onclick="toggleCard(this, '${cardId}')">
+        <span>${title}</span>
+        <span class="chevron">❯</span>
+      </div>
+      <div class="info-card-body">${bodyHtml}</div>
+    </div>`;
+  }
+
+  function toggleCard(titleEl, cardId) {
+    const el = titleEl.closest('.info-card');
+    el.classList.toggle('collapsed');
+    LS.set('card_' + cardId, el.classList.contains('collapsed'));
+  }
+
+  function toggleSection(titleEl, key) {
+    const el = titleEl.closest('.chart-section');
+    el.classList.toggle('collapsed');
+    LS.set(key, el.classList.contains('collapsed'));
+  }
+
+  // ── Current status rendering ─────────────────────────────────
+
+  function renderMachineInfo(m) {
+    const statusIcon  = { online: '🟢', offline: '🔴', stale: '🟡', never: '⚫' }[m.status] ?? '⚫';
+    const statusLabel = m.status ?? 'unknown';
+    document.getElementById('page-status-dot').textContent  = statusIcon;
+    document.getElementById('page-machine-id').textContent  = machineId;
+    document.getElementById('last-update').textContent =
+      m.last_seen ? `Updated: ${timeAgo(m.last_seen)}` : '—';
+
+    const gpu      = m.gpus?.[0] ?? null;
+    const isBw     = m.mode === 'bandwidth';
+    const bw       = m.bandwidth ?? {};
+    const bwTotals = m.bandwidth_totals ?? {};
+
+    // ── Summary card ──
+    const saladOn = m.salad_running;
+    let summaryBody = `
+      <div class="row">
+        <span class="label">Status</span>
+        <span class="val"><span class="status-badge ${statusLabel}">${statusIcon} ${statusLabel}</span></span>
+      </div>`;
+    if (m.cpu_name)    summaryBody += `<div class="row"><span class="label">CPU</span><span class="val ok" style="text-align:right;font-size:11px">${m.cpu_name}</span></div>`;
+    if (m.ram_total_gb) summaryBody += `<div class="row"><span class="label">RAM</span><span class="val ok">${Math.round(m.ram_total_gb)} GB</span></div>`;
+    summaryBody += `<div class="row"><span class="label">Uptime</span><span class="val ok">${uptimeFmt(m.uptime_hours)}</span></div>`;
+    summaryBody += `<div class="row"><span class="label">Salad</span><span class="val ${saladOn ? 'good' : 'crit'}">${saladOn ? 'Running' : 'Stopped'}</span></div>`;
+    if (m.salad_version) summaryBody += `<div class="row"><span class="label">Version</span><span class="val ok" style="font-family:monospace">${m.salad_version.split('.').slice(0,3).join('.')}</span></div>`;
+    if (m.earning_rate != null) summaryBody += `<div class="row"><span class="label">Earning</span><span class="val good">$${m.earning_rate.toFixed(2)}/hr</span></div>`;
+    const summaryHtml = card('Machine', summaryBody, 'machine');
+
+    // ── System card ──
+    const ramStr = m.ram_used_gb != null
+      ? `${fmt(m.ram_used_pct)}% · ${fmt(m.ram_used_gb,1)}/${fmt(m.ram_total_gb,1)} GB`
+      : `${fmt(m.ram_used_pct)}%`;
+    const sysBody = barRow('CPU', m.cpu_pct, `${fmt(m.cpu_pct)}%`, barColor)
+                  + barRow('RAM', m.ram_used_pct, ramStr, barColor)
+                  + barRow('Disk', m.disk_used_pct, `${fmt(m.disk_used_pct)}%`, barColor);
+    const sysHtml = card('System', sysBody, 'system');
+
+    // ── GPU card ──
+    let gpuHtml = '';
+    if (gpu && !isBw) {
+      const tc = tempClass(gpu.temperature_c);
+      const tempBarColor = tc === 'crit' ? 'red' : tc === 'hot' ? 'orange' : tc === 'warm' ? 'yellow' : 'green';
+      const pct = gpu.memory_total_mb ? Math.round(gpu.memory_used_mb / gpu.memory_total_mb * 100) : null;
+      const powerStr = gpu.power_w != null
+        ? (gpu.power_limit_w != null ? `${gpu.power_w}/${gpu.power_limit_w} W` : `${gpu.power_w} W`)
+        : '—';
+      const memStr = pct != null ? `${pct}% · ${fmt(gpu.memory_used_mb)}/${fmt(gpu.memory_total_mb)} MB` : '—';
+
+      let gpuBody = `<div class="row">
+          <span class="label">Temp</span>
+          <div class="bar-wrap"><div class="bar-fill ${tempBarColor}" style="width:${Math.min(100,(gpu.temperature_c??0)/110*100)}%"></div></div>
+          <span class="val ${tc}">${gpu.temperature_c != null ? gpu.temperature_c + '°C' : '—'}</span>
+        </div>`;
+      gpuBody += barRow('Load', gpu.utilization_pct, `${fmt(gpu.utilization_pct)}%`, 'neutral');
+      gpuBody += `<div class="row">
+          <span class="label">Fan</span>
+          <div class="bar-wrap"><div class="bar-fill neutral" style="width:${Math.min(100, gpu.fan_speed_pct ?? 0)}%"></div></div>
+          <span class="val">${gpu.fan_speed_pct != null ? gpu.fan_speed_pct + '%' : '—'}</span>
+        </div>`;
+      gpuBody += barRow('VRAM', pct, memStr, barColor);
+      gpuBody += `<div class="row"><span class="label">Power</span><span class="val ok">${powerStr}</span></div>`;
+      if (gpu.throttle_reasons?.length) {
+        gpuBody += `<div class="tags">${gpu.throttle_reasons.map(r => `<span class="tag warn">${r}</span>`).join('')}</div>`;
+      }
+      gpuHtml = card(`GPU · ${gpu.name ?? '—'}`, gpuBody, 'gpu');
+    }
+
+    // ── Network card ──
+    const up = `<span style="color:#80bf89">⬆</span>`;
+    const dn = `<span style="color:#9bc9ff">⬇</span>`;
+    let netBody = `
+      <div class="row"><span class="label">Download</span><span class="val" style="color:#9bc9ff">${fmtMbps(bw.download_mbps)} ${dn}</span></div>
+      <div class="row"><span class="label">Upload</span><span class="val" style="color:#80bf89">${fmtMbps(bw.upload_mbps)} ${up}</span></div>
+      <hr class="divider">`;
+    for (const [key, label] of [['15m','Last 15m'],['1h','Last 1h'],['24h','Last 24h']]) {
+      const t = bwTotals[key] ?? {};
+      netBody += `<div class="row">
+        <span class="label" style="min-width:64px">${label}</span>
+        <span class="val" style="color:#9bc9ff;font-family:monospace">${fmtMB(t.downloaded_mb)} ${dn}</span>
+        <span class="val" style="color:#80bf89;font-family:monospace">${fmtMB(t.uploaded_mb)} ${up}</span>
+      </div>`;
+    }
+    const netHtml = card('Network', netBody, 'network');
+
+    return summaryHtml + sysHtml + gpuHtml + netHtml;
+  }
+
+  // ── Chart rendering ──────────────────────────────────────────
+
+  // ── localStorage helpers ─────────────────────────────────────
+  const LS = {
+    get: (key, fallback) => { try { const v = localStorage.getItem('sm_' + key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
+    set: (key, val)      => { try { localStorage.setItem('sm_' + key, JSON.stringify(val)); } catch {} },
+  };
+
+  let _charts   = [];
+  let _allStats = [];
+  let _rangeH   = LS.get('rangeH',  1);
+  let _ramInGb  = LS.get('ramInGb', true);
+
+  function destroyCharts() { _charts.forEach(c => c.destroy()); _charts = []; }
+
+  function buildBuckets(records, hours) {
+    // Build a full minute-by-minute timeline for the range,
+    // mapping each bucket to the matching record (or null if missing).
+    const now      = Date.now();
+    const cutoff   = now - hours * 3600 * 1000;
+    // Align start to the nearest past minute
+    const startMs  = Math.floor(cutoff / 60000) * 60000;
+    const endMs    = Math.floor(now   / 60000) * 60000;
+
+    // Index records by their rounded minute timestamp
+    const byTs = {};
+    for (const r of records) {
+      const key = Math.round(new Date(r.ts).getTime() / 60000) * 60000;
+      byTs[key] = r;
+    }
+
+    const labels = [];
+    const byKey  = [];
+    for (let t = startMs; t <= endMs; t += 60000) {
+      labels.push(new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      byKey.push(byTs[t] ?? null);
+    }
+    return { labels, byKey };
+  }
+
+  function renderCharts(records) {
+    destroyCharts();
+    const grid = document.getElementById('charts-grid');
+    if (!grid) return;
+
+    const { labels, byKey } = buildBuckets(records, _rangeH);
+
+    const hasGpu = records.some(r => r.gpus?.length > 0);
+
+    const v = (fn) => byKey.map(r => r != null ? (fn(r) ?? null) : null);
+
+    // Totals are constant — take first non-null value from the full record set
+    const ramTotalGb  = records.find(r => r.ram_total_gb            != null)?.ram_total_gb            ?? null;
+    const vramTotalGb = records.find(r => r.gpus?.[0]?.mem_total_gb != null)?.gpus?.[0]?.mem_total_gb ?? null;
+
+    const sections = [
+      ...(hasGpu ? [{
+        title: 'GPU',
+        defs: [
+          { id: 'ch-gutil', title: 'Utilization (%)',  data: v(r => r.gpus?.[0]?.util),                                                    color: '#3fb950', unit: '%',  max: 100        },
+          { id: 'ch-gtemp', title: 'Temperature (°C)', data: v(r => r.gpus?.[0]?.temp),                                                    color: '#e3742b', unit: '°C', max: null       },
+          { id: 'ch-gpow',  title: 'Power (W)',         data: v(r => r.gpus?.[0]?.power),                                                   color: '#f0e040', unit: 'W',  max: null       },
+          { id: 'ch-gmem',  title: `VRAM (${_ramInGb ? 'GB' : '%'})`,
+                                                        data: _ramInGb ? v(r => r.gpus?.[0]?.mem_gb) : v(r => r.gpus?.[0]?.mem_pct),        color: '#ff7b72', unit: _ramInGb ? 'GB' : '%', max: _ramInGb ? vramTotalGb : 100, gbToggle: true },
+        ],
+      }] : []),
+      {
+        title: 'System',
+        defs: [
+          { id: 'ch-cpu',  title: 'CPU (%)',            data: v(r => r.cpu),                                                                color: '#58a6ff', unit: '%',  max: 100        },
+          { id: 'ch-ram',  title: `RAM (${_ramInGb ? 'GB' : '%'})`,
+                                                        data: _ramInGb ? v(r => r.ram_gb) : v(r => r.ram_pct),                              color: '#bc8cff', unit: _ramInGb ? 'GB' : '%', max: _ramInGb ? ramTotalGb : 100, gbToggle: true },
+          { id: 'ch-disk', title: 'Disk (%)',            data: v(r => r.disk_pct),                                                          color: '#8b949e', unit: '%',  max: 100        },
+        ],
+      },
+      {
+        title: 'Network',
+        defs: [
+          { id: 'ch-dn', title: 'Download (Mbps)', data: v(r => r.dn_mbps), color: '#9bc9ff', unit: 'Mbps', max: null },
+          { id: 'ch-up', title: 'Upload (Mbps)',   data: v(r => r.up_mbps), color: '#80bf89', unit: 'Mbps', max: null },
+        ],
+      },
+    ];
+
+    if (!labels.length) {
+      grid.innerHTML = '<div class="loading-text" style="padding:30px 0">No historical data yet. Data accumulates every 60 seconds.</div>';
+      return;
+    }
+
+    const cardHtml = d => `
+      <div class="chart-card">
+        <div class="chart-card-title">
+          <span>${d.title}</span>
+          ${d.gbToggle ? `<label class="unit-toggle"><input type="checkbox" ${_ramInGb ? '' : 'checked'} onchange="toggleRamUnit(this)"> Show percentages</label>` : ''}
+        </div>
+        <div class="chart-wrap"><canvas id="${d.id}"></canvas></div>
+      </div>`;
+
+    grid.innerHTML = sections.map(s => {
+      const key       = 'section_' + s.title.toLowerCase().replace(/\s+/g, '_');
+      const collapsed = LS.get(key, false); // default: expanded
+      return `<div class="chart-section ${collapsed ? 'collapsed' : ''}">
+        <div class="chart-section-title" onclick="toggleSection(this, '${key}')">
+          <span>${s.title}</span>
+          <span class="chevron">❯</span>
+        </div>
+        <div class="charts-grid">${s.defs.map(cardHtml).join('')}</div>
+      </div>`;
+    }).join('');
+
+    const allDefs = sections.flatMap(s => s.defs);
+
+    const crosshairPlugin = {
+      id: 'crosshair',
+      afterDraw(chart) {
+        if (!chart._cursorX) return;
+        const { ctx, chartArea: { top, bottom } } = chart;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(chart._cursorX, top);
+        ctx.lineTo(chart._cursorX, bottom);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
+
+    setTimeout(() => {
+      const opts = (unit, max) => ({
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: { label: ctx => `${ctx.parsed.y ?? '—'} ${unit}` },
+          },
+        },
+        scales: {
+          x: { ticks: { color: '#8b949e', font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: '#21262d' } },
+          y: { min: 0, ...(max != null ? { max } : {}), ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+        },
+      });
+
+      for (const d of allDefs) {
+        const canvas = document.getElementById(d.id);
+        if (!canvas) continue;
+        const chart = new Chart(canvas, {
+          type: 'line',
+          plugins: [crosshairPlugin],
+          data: {
+            labels,
+            datasets: [{
+              data: d.data,
+              borderColor: d.color,
+              backgroundColor: d.color + '22',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: true,
+              spanGaps: false,
+            }],
+          },
+          options: opts(d.unit, d.max),
+        });
+
+        canvas.addEventListener('mousemove', e => {
+          const rect = canvas.getBoundingClientRect();
+          chart._cursorX = e.clientX - rect.left;
+          chart.draw();
+        });
+        canvas.addEventListener('mouseleave', () => {
+          chart._cursorX = null;
+          chart.draw();
+        });
+
+        _charts.push(chart);
+      }
+    }, 0);
+  }
+
+  function onRangeChange(sel) {
+    _rangeH = parseInt(sel.value);
+    LS.set('rangeH', _rangeH);
+    renderCharts(_allStats);
+  }
+
+  function toggleRamUnit(cb) {
+    _ramInGb = !cb.checked;
+    LS.set('ramInGb', _ramInGb);
+    renderCharts(_allStats);
+  }
+
+  function buildChartsSection(records) {
+    _allStats = records;
+    return `
+      <div class="charts-header">
+        <div class="section-title">History</div>
+        <select class="range-select" onchange="onRangeChange(this)">
+          <option value="1"  ${_rangeH ===  1 ? 'selected' : ''}>Last 1h</option>
+          <option value="6"  ${_rangeH ===  6 ? 'selected' : ''}>Last 6h</option>
+          <option value="12" ${_rangeH === 12 ? 'selected' : ''}>Last 12h</option>
+          <option value="24" ${_rangeH === 24 ? 'selected' : ''}>Last 24h</option>
+        </select>
+      </div>
+      <div id="charts-grid"></div>`;
+  }
+
+  // ── Earnings chart ──────────────────────────────────────────
+
+  let _earningsData  = [];   // [{ ts: Date, value: number }]
+  let _earningsChart = null;
+  let _earningsRange = LS.get('earningsRange', '30d');
+
+  function earningsCutoff(range) {
+    const now = Date.now();
+    if (range === '24h') return now - 24 * 3600 * 1000;
+    if (range === '7d')  return now -  7 * 86400 * 1000;
+    return 0;
+  }
+
+  function earningsLabel(date, range) {
+    if (range === '24h') return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (range === '7d')  return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+                                date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  function renderEarningsChart() {
+    const canvas = document.getElementById('ch-earnings');
+    const totalEl = document.getElementById('earnings-total');
+    if (!canvas) return;
+
+    const cutoff   = earningsCutoff(_earningsRange);
+    const filtered = _earningsData.filter(d => d.ts.getTime() >= cutoff);
+
+    if (_earningsChart) { _earningsChart.destroy(); _earningsChart = null; }
+
+    if (!filtered.length) {
+      totalEl.textContent = '—';
+      return;
+    }
+
+    const total = filtered.reduce((s, d) => s + d.value, 0);
+    totalEl.textContent = `$${total.toFixed(4)}`;
+
+    // Group by day for 7d and 30d views
+    let labels, values;
+    if (_earningsRange === '7d' || _earningsRange === '30d') {
+      const byDay = {};
+      for (const d of filtered) {
+        const key = d.ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        byDay[key] = (byDay[key] ?? 0) + d.value;
+      }
+      labels = Object.keys(byDay);
+      values = Object.values(byDay);
+    } else {
+      labels = filtered.map(d => earningsLabel(d.ts, _earningsRange));
+      values = filtered.map(d => d.value);
+    }
+
+    _earningsChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: 'rgba(63,185,80,0.5)',
+          borderColor:     '#3fb950',
+          borderWidth: 1,
+          borderRadius: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: { label: ctx => _earningsRange === '24h' ? `$${ctx.parsed.y.toFixed(6)}` : `$${ctx.parsed.y.toFixed(4)}` },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: '#8b949e', font: { size: 10 }, maxTicksLimit: 10, maxRotation: 0 },
+            grid:  { color: '#21262d' },
+          },
+          y: {
+            min: 0,
+            ticks: { color: '#8b949e', font: { size: 10 }, callback: v => `$${v.toFixed(4)}` },
+            grid:  { color: '#21262d' },
+          },
+        },
+      },
+    });
+  }
+
+  function onEarningsRangeChange(sel) {
+    _earningsRange = sel.value;
+    LS.set('earningsRange', _earningsRange);
+    renderEarningsChart();
+  }
+
+  async function loadEarningsData(saladMachineId) {
+    if (!saladMachineId) return;
+    try {
+      const r = await fetch(`/api/earnings/${encodeURIComponent(saladMachineId)}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      const earnings = data.earnings ?? {};
+      _earningsData = Object.entries(earnings)
+        .map(([ts, value]) => ({ ts: new Date(ts), value }))
+        .sort((a, b) => a.ts - b.ts);
+      renderEarningsChart();
+    } catch(e) {
+      console.error('Earnings fetch error:', e);
+    }
+  }
+
+  // ── Data fetching ────────────────────────────────────────────
+
+  async function loadCurrentData() {
+    const r = await fetch('/api/dashboard');
+    if (r.status === 401) { showAuthOverlay(); throw new Error('401'); }
+    const data = await r.json();
+    return data.machines.find(m => m.machine_id === machineId) ?? null;
+  }
+
+  async function loadStatsData() {
+    const r = await fetch(`/api/stats/${encodeURIComponent(machineId)}`);
+    if (!r.ok) return [];
+    return r.json();
+  }
+
+  async function refreshAll() {
+    document.getElementById('refresh-btn').textContent = '↻ Refreshing…';
+    try {
+      const [machine, stats] = await Promise.all([loadCurrentData(), loadStatsData()]);
+      render(machine, stats);
+    } catch(e) {
+      if (e.message !== '401') console.error(e);
+    }
+    document.getElementById('refresh-btn').textContent = '↻ Refresh';
+  }
+
+  function render(machine, stats) {
+    const main = document.getElementById('main-content');
+
+    if (!machine) {
+      main.innerHTML = `<div class="loading-text" style="color:var(--red)">Machine "${machineId}" not found.</div>`;
+      return;
+    }
+
+    destroyCharts();
+
+    const infoHtml = renderMachineInfo(machine);
+
+    main.innerHTML = `
+      <div>
+        <div class="section-title">Current status</div>
+        <div class="info-grid">${infoHtml}</div>
+      </div>
+      <div id="earnings-section">
+        <div class="earnings-header">
+          <div class="earnings-title">
+            💰 Earnings
+            <span class="earnings-total" id="earnings-total">—</span>
+          </div>
+          <div class="earnings-controls">
+            <select class="range-select" id="earnings-range" onchange="onEarningsRangeChange(this)">
+              <option value="24h" ${_earningsRange === '24h' ? 'selected' : ''}>Last 24h</option>
+              <option value="7d"  ${_earningsRange === '7d'  ? 'selected' : ''}>Last 7 days</option>
+              <option value="30d" ${_earningsRange === '30d' ? 'selected' : ''}>Last 30 days</option>
+            </select>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="ch-earnings"></canvas></div>
+      </div>
+      <div>${buildChartsSection(stats)}</div>`;
+
+    renderCharts(stats);
+    loadEarningsData(machine.salad_machine_id);
+  }
+
+  async function init() {
+    if (!machineId) {
+      document.getElementById('main-content').innerHTML =
+        `<div class="loading-text" style="color:var(--red)">No machine ID specified.</div>`;
+      return;
+    }
+    await refreshAll();
+
+    // Auto-refresh current data every 30s (charts every 5m)
+    setInterval(async () => {
+      try {
+        const machine = await loadCurrentData();
+        if (!machine) return;
+        renderMachineInfo(machine);
+        document.getElementById('last-update').textContent = `Updated: ${timeAgo(machine.last_seen)}`;
+      } catch(_) {}
+    }, 30_000);
+
+    setInterval(async () => {
+      try {
+        const stats = await loadStatsData();
+        _allStats = stats;
+        renderCharts(stats);
+      } catch(_) {}
+    }, 300_000);
+  }
+
+  checkAuth();
+
+  // Resize all active charts when the container changes size
+  function resizeAllCharts() {
+    const all = _earningsChart ? [..._charts, _earningsChart] : [..._charts];
+    all.forEach(c => {
+      c.canvas.style.width  = '';
+      c.canvas.style.height = '';
+      c.resize();
+    });
+  }
+
+  let _resizeTimer;
+  const _resizeObserver = new ResizeObserver(() => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(resizeAllCharts, 50);
+  });
+  _resizeObserver.observe(document.getElementById('main-content'));
+</script>
+</body>
+</html>

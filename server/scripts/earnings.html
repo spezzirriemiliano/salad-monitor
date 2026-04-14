@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Earnings — Salad Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --green:   #3fb950;
+      --yellow:  #d29922;
+      --orange:  #e3742b;
+      --red:     #f85149;
+      --blue:    #58a6ff;
+      --purple:  #bc8cff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Auth overlay ── */
+    #auth-overlay {
+      display: none; position: fixed; inset: 0;
+      background: var(--bg); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    #auth-overlay.visible { display: flex; }
+    .auth-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 32px; width: 100%; max-width: 360px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .auth-box h2 { font-size: 18px; font-weight: 600; }
+    .auth-box p  { color: var(--muted); font-size: 12px; }
+    .auth-box input[type=password] {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 8px 12px;
+      font-size: 14px; outline: none;
+    }
+    .auth-box input[type=password]:focus { border-color: var(--blue); }
+    .auth-box button.primary {
+      background: var(--blue); color: #000; border: none; border-radius: 6px;
+      padding: 9px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%;
+    }
+    .auth-box button.primary:hover { opacity: .85; }
+    .auth-error { color: var(--red); font-size: 12px; min-height: 16px; }
+
+    /* ── Header ── */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 10px 20px; display: flex; align-items: center; gap: 12px;
+    }
+    .back-btn {
+      background: #21262d; border: 1px solid var(--border);
+      color: var(--muted); padding: 4px 12px; border-radius: 6px;
+      font-size: 12px; text-decoration: none;
+      transition: background .15s, color .15s; white-space: nowrap;
+    }
+    .back-btn:hover { background: #30363d; color: var(--text); }
+    #page-title { font-size: 15px; font-weight: 700; }
+    #header-right {
+      margin-left: auto; display: flex; align-items: center;
+      gap: 10px; flex-shrink: 0;
+    }
+    #last-update { color: var(--muted); font-size: 12px; }
+    #refresh-btn {
+      background: #21262d; border: 1px solid var(--border);
+      color: var(--text); padding: 4px 12px; border-radius: 6px;
+      cursor: pointer; font-size: 12px; transition: background .15s;
+    }
+    #refresh-btn:hover { background: #30363d; }
+
+    /* ── Main ── */
+    main {
+      padding: 20px; display: flex; flex-direction: column;
+      gap: 20px; max-width: 900px; margin: 0 auto;
+    }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 20px;
+      display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
+    }
+    .summary-stat { display: flex; flex-direction: column; gap: 2px; }
+    .summary-stat .s-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted);
+    }
+    .summary-stat .s-value {
+      font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+      font-family: monospace; color: var(--green);
+    }
+    .summary-stat .s-value.purple { color: var(--purple); }
+    .summary-stat .s-value.blue   { color: var(--blue); }
+    .s-divider { width: 1px; height: 36px; background: var(--border); flex-shrink: 0; }
+    .s-divider.strong { width: 2px; height: 44px; background: #444c56; border-radius: 1px; }
+    .s-arrow { color: var(--muted); font-size: 14px; align-self: center; }
+    .s-group { display: flex; align-items: center; gap: 16px; }
+    @media (max-width: 600px) {
+      .summary-bar { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .s-divider.strong { display: none; }
+    }
+
+    /* ── Section card ── */
+    .section-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted);
+    }
+    .section-body { padding: 16px; }
+    .section-header-right { display: flex; align-items: center; gap: 10px; }
+    .range-select {
+      background: #21262d; border: 1px solid var(--border);
+      color: var(--text); padding: 3px 8px; border-radius: 6px;
+      font-size: 11px; cursor: pointer; outline: none;
+    }
+    .range-select:hover { border-color: var(--muted); }
+    .chart-type-toggle {
+      display: flex;
+      background: #21262d;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .chart-type-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); padding: 3px 9px; font-size: 13px;
+      transition: background .15s, color .15s;
+      line-height: 1;
+    }
+    .chart-type-btn:hover { color: var(--text); }
+    .chart-type-btn.active { background: #30363d; color: var(--text); }
+    .unit-toggle {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; color: var(--muted); cursor: pointer;
+      user-select: none; white-space: nowrap;
+      background: #21262d; border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 7px;
+      transition: border-color .15s, color .15s;
+    }
+    .unit-toggle:hover { border-color: var(--muted); color: var(--text); }
+    .unit-toggle input[type=checkbox] {
+      appearance: none; -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border: 1.5px solid var(--muted); border-radius: 3px;
+      cursor: pointer; position: relative; flex-shrink: 0;
+      transition: background .15s, border-color .15s;
+    }
+    .unit-toggle input[type=checkbox]:checked { background: var(--blue); border-color: var(--blue); }
+    .unit-toggle input[type=checkbox]:checked::after {
+      content: ''; position: absolute;
+      left: 2px; top: 0px; width: 5px; height: 8px;
+      border: 1.5px solid #000; border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+
+    /* ── Chart ── */
+    .chart-wrap { position: relative; height: 300px; }
+    #chart-loading {
+      color: var(--muted); font-size: 12px;
+      text-align: center; padding: 20px 0;
+    }
+
+    /* ── Machine table ── */
+    #machine-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .machine-table {
+      width: 100%; border-collapse: collapse; min-width: 600px;
+    }
+    .machine-table th {
+      text-align: left; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--muted); padding: 0 8px 10px 8px;
+      white-space: nowrap;
+    }
+    .machine-table th:last-child { text-align: right; }
+    .machine-table td {
+      padding: 8px; border-top: 1px solid var(--border);
+      vertical-align: middle; white-space: nowrap;
+    }
+    .machine-table tr:hover td { background: #1c2129; }
+    .machine-row-name {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .machine-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      flex-shrink: 0; background: var(--muted);
+    }
+    .machine-dot.online  { background: var(--green); }
+    .machine-dot.offline { background: var(--red); }
+    .machine-dot.stale   { background: var(--yellow); }
+    .machine-dot.never   { background: var(--muted); }
+    .machine-color-dot {
+      width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+    }
+    .machine-name-text { font-weight: 600; }
+    .machine-sub { font-size: 11px; color: var(--muted); }
+    .rate-val {
+      font-family: monospace; font-weight: 700;
+      color: var(--green); white-space: nowrap;
+    }
+    .total-val {
+      font-family: monospace; font-weight: 600;
+      color: var(--text); white-space: nowrap; text-align: right;
+    }
+    .detail-link {
+      font-size: 11px; color: var(--muted); text-decoration: none;
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 3px 10px; transition: color .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .detail-link:hover { color: var(--blue); border-color: rgba(88,166,255,.4); }
+    .no-data { color: var(--muted); font-size: 11px; }
+    .totals-row td { border-top: 2px solid var(--border); background: #1c2129; }
+
+    .loading { color: var(--muted); font-size: 12px; padding: 20px 0; text-align: center; }
+  </style>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <div class="auth-box">
+    <h2>Salad Monitor</h2>
+    <p>Enter password to continue.</p>
+    <input type="password" id="auth-input" placeholder="Password" autocomplete="current-password">
+    <div class="auth-error" id="auth-error"></div>
+    <button class="primary" id="auth-submit">Login</button>
+  </div>
+</div>
+
+<header>
+  <a class="back-btn" href="/dashboard">← Dashboard</a>
+  <span id="page-title">Earnings</span>
+  <div id="header-right">
+    <span id="last-update"></span>
+    <button id="refresh-btn" onclick="loadData()">Refresh</button>
+  </div>
+</header>
+
+<main>
+  <!-- Summary -->
+  <div id="summary-wrap"></div>
+
+  <!-- Stacked chart -->
+  <div id="chart-section" class="section-card">
+    <div class="section-header">
+      <span class="section-title">Earnings by machine</span>
+      <div class="section-header-right">
+        <select class="range-select" id="chart-range" onchange="saveChartPrefs(); buildChart()">
+          <option value="24h">Last 24h</option>
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+        </select>
+        <div class="chart-type-toggle">
+          <button class="chart-type-btn active" id="btn-bar"  onclick="setChartType('bar')">Bar</button>
+          <button class="chart-type-btn"        id="btn-line" onclick="setChartType('line')">Line</button>
+        </div>
+        <label class="unit-toggle">
+          <input type="checkbox" id="show-total" onchange="saveChartPrefs(); buildChart()">
+          Totals
+        </label>
+      </div>
+    </div>
+    <div class="section-body">
+      <div id="chart-loading" class="loading">Loading…</div>
+      <div class="chart-wrap" id="chart-wrap" style="display:none">
+        <canvas id="stacked-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Per-machine table -->
+  <div id="table-section" class="section-card">
+    <div class="section-header">
+      <span class="section-title">Per machine</span>
+    </div>
+    <div class="section-body">
+      <div id="machine-table-wrap"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Auth ─────────────────────────────────────────────────────
+const overlay   = document.getElementById('auth-overlay');
+const authInput = document.getElementById('auth-input');
+const authError = document.getElementById('auth-error');
+
+document.getElementById('auth-submit').addEventListener('click', doLogin);
+authInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const pw = authInput.value.trim();
+  if (!pw) return;
+  authError.textContent = '';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ password: pw })
+    });
+    if (r.ok) { overlay.classList.remove('visible'); loadData(); }
+    else { authError.textContent = 'Wrong password.'; }
+  } catch { authError.textContent = 'Connection error.'; }
+}
+
+async function authFetch(url, opts = {}) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) { overlay.classList.add('visible'); authInput.value = ''; throw new Error('auth'); }
+  return r;
+}
+
+// ── State ────────────────────────────────────────────────────
+let _overview      = null;   // /api/earnings-overview response
+let _machineDaily  = {};     // { machine_id: { "YYYY-MM-DD": amount } }
+let _machineHourly = {};     // { machine_id: { "YYYY-MM-DDTHH": amount } }
+let _stackedChart        = null;
+let _perMachineDatasets  = [];  // kept for tooltip breakdown when totals mode is on
+let _chartType     = localStorage.getItem('sm_earn_chart_type') || 'bar';
+
+function saveChartPrefs() {
+  localStorage.setItem('sm_earn_range',      document.getElementById('chart-range').value);
+  localStorage.setItem('sm_earn_chart_type', _chartType);
+  localStorage.setItem('sm_earn_totals',     document.getElementById('show-total').checked);
+}
+
+// Color palette per machine (bg, border)
+const PALETTE = [
+  ['rgba(63,185,80,.55)',  'rgba(63,185,80,.9)'],
+  ['rgba(88,166,255,.55)', 'rgba(88,166,255,.9)'],
+  ['rgba(188,140,255,.55)','rgba(188,140,255,.9)'],
+  ['rgba(227,116,43,.55)', 'rgba(227,116,43,.9)'],
+  ['rgba(210,153,34,.55)', 'rgba(210,153,34,.9)'],
+  ['rgba(248,81,73,.55)',  'rgba(248,81,73,.9)'],
+  ['rgba(0,210,180,.55)',  'rgba(0,210,180,.9)'],
+  ['rgba(255,182,72,.55)', 'rgba(255,182,72,.9)'],
+];
+
+const eyeOpenSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const eyeOffSvg  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+let _balanceVisible = localStorage.getItem('sm_balance_visible') !== 'false';
+
+
+// ── Main load ─────────────────────────────────────────────────
+async function loadData() {
+  document.getElementById('last-update').textContent = '';
+  document.getElementById('chart-loading').style.display = '';
+  document.getElementById('chart-wrap').style.display    = 'none';
+
+  try {
+    const r = await authFetch('/api/earnings-overview');
+    if (!r.ok) return;
+    _overview = await r.json();
+
+    renderSummary(_overview);
+
+    // Fetch per-machine histories in parallel
+    const machines = (_overview.machines || []).filter(m => m.salad_machine_id);
+    await Promise.all(machines.map(m => fetchMachineDaily(m)));
+
+    buildChart();
+    renderTable();
+
+    document.getElementById('last-update').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    if (e.message !== 'auth') console.error(e);
+  }
+}
+
+// ── Fetch daily history for one machine ───────────────────────
+async function fetchMachineDaily(m) {
+  try {
+    const r = await authFetch('/api/earnings/' + encodeURIComponent(m.salad_machine_id));
+    if (!r.ok) return;
+    const raw = await r.json();
+    if (raw.error) return;
+
+    // raw = { earnings: { "2024-01-15T00:00:00Z": 0.01, ... } }
+    const earnings = raw.earnings ?? {};
+    const byDay  = {};
+    const byHour = {};
+    for (const [ts, val] of Object.entries(earnings)) {
+      try {
+        const d = new Date(ts);
+        const dayKey  = d.toISOString().slice(0, 10);       // "2024-01-15"
+        const hourKey = d.toISOString().slice(0, 13);       // "2024-01-15T14"
+        byDay[dayKey]   = (byDay[dayKey]   || 0) + val;
+        byHour[hourKey] = (byHour[hourKey] || 0) + val;
+      } catch {}
+    }
+    _machineDaily[m.machine_id]  = byDay;
+    _machineHourly[m.machine_id] = byHour;
+  } catch(e) {
+    if (e.message !== 'auth') console.error('fetchMachineDaily', m.machine_id, e);
+  }
+}
+
+// ── Build stacked chart ───────────────────────────────────────
+function setChartType(type) {
+  _chartType = type;
+  document.getElementById('btn-bar').classList.toggle('active',  type === 'bar');
+  document.getElementById('btn-line').classList.toggle('active', type === 'line');
+  saveChartPrefs();
+  buildChart();
+}
+
+function buildChart() {
+  if (!_overview) return;
+
+  const range = document.getElementById('chart-range').value;
+  const is24h = range === '24h';
+
+  // Build X-axis keys and display labels
+  const now = new Date();
+  const keys   = [];  // lookup keys for data
+  const labels = [];  // display labels
+
+  if (is24h) {
+    // Last 24 hours, one bucket per hour
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now);
+      d.setMinutes(0, 0, 0);
+      d.setHours(d.getHours() - i);
+      keys.push(d.toISOString().slice(0, 13));   // "2024-01-15T14"
+      labels.push(fmtHour(d));
+    }
+  } else {
+    // Last N days, one bucket per day
+    const days = parseInt(range, 10);
+    const today = new Date(now);
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      keys.push(key);
+      labels.push(fmtDate(key));
+    }
+  }
+
+  const source   = is24h ? _machineHourly : _machineDaily;
+  const machines = (_overview.machines || []).filter(m => source[m.machine_id]);
+
+  const isLine = _chartType === 'line';
+
+  const datasets = machines.map((m, idx) => {
+    const [bg, border] = PALETTE[idx % PALETTE.length];
+    const data = source[m.machine_id];
+    const values = keys.map(k => Math.round((data[k] || 0) * 1e6) / 1e6);
+    if (isLine) {
+      return {
+        label: m.machine_id,
+        data: values,
+        borderColor:     border,
+        backgroundColor: bg,
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.3,
+        fill: false,
+      };
+    }
+    return {
+      label: m.machine_id,
+      data: values,
+      backgroundColor: bg,
+      borderWidth: 0,
+      borderRadius: 2,
+      stack: 'earnings',
+    };
+  });
+
+  // Always keep per-machine datasets for tooltip breakdown
+  _perMachineDatasets = datasets.slice();
+
+  // If "Totals" checked: replace all datasets with a single total
+  const showTotal = document.getElementById('show-total').checked;
+  if (showTotal && datasets.length > 0) {
+    const totals = keys.map((_, i) =>
+      Math.round(datasets.reduce((s, ds) => s + (ds.data[i] || 0), 0) * 1e6) / 1e6
+    );
+    datasets.length = 0;
+    if (isLine) {
+      datasets.push({
+        label: 'Total',
+        data:  totals,
+        borderColor:     'rgba(255,255,255,0.8)',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.3,
+        fill: false,
+      });
+    } else {
+      datasets.push({
+        label:           'Total',
+        data:            totals,
+        backgroundColor: 'rgba(88,166,255,0.55)',
+        borderWidth: 0,
+        borderRadius: 2,
+        stack: 'earnings',
+      });
+    }
+  }
+
+
+  document.getElementById('chart-loading').style.display = 'none';
+  document.getElementById('chart-wrap').style.display    = '';
+
+  if (_stackedChart) _stackedChart.destroy();
+  const ctx = document.getElementById('stacked-chart').getContext('2d');
+  _stackedChart = new Chart(ctx, {
+    type: isLine ? 'line' : 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'bottom',
+          labels: {
+            color: '#8b949e',
+            font: { size: 11 },
+            boxWidth: 12,
+            padding: 12,
+          },
+          onHover: (_, item) => highlightMachine(item.text),
+          onLeave: ()        => clearHighlight(),
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          enabled: false,
+          external: ({chart, tooltip}) => {
+            let el = document.getElementById('earnings-tooltip');
+            if (!el) {
+              el = document.createElement('div');
+              el.id = 'earnings-tooltip';
+              el.style.cssText = [
+                'position:absolute', 'pointer-events:none', 'z-index:100',
+                'background:#161b22', 'border:1px solid #30363d', 'border-radius:6px',
+                'padding:8px 12px', 'font-size:11px', 'white-space:nowrap',
+                'transition:opacity .1s', 'font-family:monospace',
+              ].join(';');
+              chart.canvas.parentNode.style.position = 'relative';
+              chart.canvas.parentNode.appendChild(el);
+            }
+
+            if (tooltip.opacity === 0) { el.style.opacity = '0'; return; }
+            el.style.opacity = '1';
+
+            const items = tooltip.dataPoints ?? [];
+            if (!items.length) return;
+
+            const isTotals = document.getElementById('show-total').checked;
+            const idx      = items[0].dataIndex;
+            const title    = tooltip.title?.[0] ?? '';
+
+            let html = `<div style="color:#8b949e;font-size:10px;margin-bottom:5px">${title}</div>`;
+
+            if (isTotals && _perMachineDatasets.length) {
+              _perMachineDatasets.forEach(ds => {
+                const v     = ds.data[idx] || 0;
+                const color = v > 0 ? '#b7f4be' : '#6e7681';
+                html += `<div style="color:${color}"> ${ds.label}: $${v.toFixed(4)}</div>`;
+              });
+              const total = items[0].parsed.y;
+              if (total > 0) {
+                html += `<div style="color:#e6edf3;font-weight:700;margin-top:5px;padding-top:5px;border-top:1px solid #30363d">Total: $${total.toFixed(4)}</div>`;
+              }
+            } else {
+              const barItems = items.filter(i => i.dataset.type !== 'line');
+              barItems.forEach(item => {
+                const v     = item.parsed.y;
+                const color = v > 0 ? '#b7f4be' : '#6e7681';
+                const bg    = item.dataset.backgroundColor;
+                html += `<div style="color:${color};display:flex;align-items:center;gap:5px">` +
+                  `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;flex-shrink:0;background:${bg}"></span>` +
+                  ` ${item.dataset.label}: $${v.toFixed(4)}</div>`;
+              });
+              if (barItems.length >= 2) {
+                const total = barItems.reduce((s, i) => s + i.parsed.y, 0);
+                if (total > 0) {
+                  html += `<div style="color:#e6edf3;font-weight:700;margin-top:5px;padding-top:5px;border-top:1px solid #30363d">Total: $${total.toFixed(4)}</div>`;
+                }
+              }
+            }
+
+            el.innerHTML = html;
+
+            const tipW = el.offsetWidth;
+            const tipH = el.offsetHeight;
+            const canW = chart.canvas.offsetWidth;
+            const canH = chart.canvas.offsetHeight;
+
+            let x = tooltip.caretX + 14;
+            if (x + tipW > canW) x = tooltip.caretX - tipW - 14;
+
+            let y = tooltip.caretY - 10;
+            if (y + tipH > canH) y = canH - tipH - 4;
+            if (y < 0) y = 4;
+
+            el.style.left = x + 'px';
+            el.style.top  = y + 'px';
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: !isLine,
+          ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 45 },
+          grid:  { color: 'rgba(48,54,61,.6)' }
+        },
+        y: {
+          stacked: !isLine,
+          beginAtZero: true,
+          ticks: {
+            color: '#8b949e',
+            font: { size: 10 },
+            callback: v => '$' + v.toFixed(2)
+          },
+          grid: { color: 'rgba(48,54,61,.6)' }
+        }
+      }
+    }
+  });
+}
+
+// ── Render per-machine table ──────────────────────────────────
+function machineEarnings(machineId) {
+  const now   = new Date();
+  const hourly = _machineHourly[machineId] || {};
+  const daily  = _machineDaily[machineId]  || {};
+
+  // 24h: sum hourly buckets in the last 24 hours
+  let t24 = 0;
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now);
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() - i);
+    const key = d.toISOString().slice(0, 13);
+    t24 += hourly[key] || 0;
+  }
+
+  // 7d: sum daily buckets in the last 7 days
+  let t7 = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    t7 += daily[key] || 0;
+  }
+
+  // 30d: all daily buckets
+  const t30 = Object.values(daily).reduce((s, v) => s + v, 0);
+
+  const hasData = Object.keys(hourly).length > 0 || Object.keys(daily).length > 0;
+  return hasData ? { t24, t7, t30 } : null;
+}
+
+function fmtEarn(v) {
+  return v != null ? `<span class="total-val">$${v.toFixed(4)}</span>` : `<span class="no-data">—</span>`;
+}
+
+function renderTable() {
+  const wrap = document.getElementById('machine-table-wrap');
+  const machines = _overview.machines || [];
+  if (!machines.length) {
+    wrap.innerHTML = '<div class="loading">No machines.</div>';
+    return;
+  }
+
+  const sorted = [...machines].sort((a, b) => {
+    const ord = { online: 0, stale: 1, offline: 2, never: 3 };
+    return (ord[a.status] ?? 3) - (ord[b.status] ?? 3) ||
+           a.machine_id.localeCompare(b.machine_id);
+  });
+
+  // Pre-compute earnings per machine
+  const machineData = sorted.map(m => ({
+    m,
+    earnings: machineEarnings(m.machine_id),
+    paletteIdx: _overview.machines.filter(x => _machineDaily[x.machine_id])
+                  .findIndex(x => x.machine_id === m.machine_id),
+  }));
+
+  const rows = machineData.map(({ m, earnings, paletteIdx }) => {
+    const [bg] = paletteIdx >= 0 ? PALETTE[paletteIdx % PALETTE.length] : ['transparent'];
+    const rate = m.earning_rate != null ? '$' + m.earning_rate.toFixed(4) + '/hr' : '—';
+    const rawGpu  = m.gpus && m.gpus.length > 0 ? m.gpus[0].name || '' : '';
+    const gpuName = rawGpu.replace(/^(NVIDIA\s+)?(GeForce\s+)?/i, '').trim();
+
+    return `<tr onmouseenter="highlightMachine('${esc(m.machine_id)}')" onmouseleave="clearHighlight()">
+      <td>
+        <div class="machine-row-name">
+          <div class="machine-color-dot" style="background:${paletteIdx >= 0 ? bg : 'var(--border)'}"></div>
+          <div class="machine-dot ${m.status}"></div>
+          <div>
+            <div class="machine-name-text">
+              ${esc(m.machine_id)}
+              ${gpuName ? `<span class="machine-sub">(${esc(gpuName)})</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </td>
+      <td><span class="rate-val">${rate}</span></td>
+      <td>${fmtEarn(earnings?.t24)}</td>
+      <td>${fmtEarn(earnings?.t7)}</td>
+      <td>${fmtEarn(earnings?.t30)}</td>
+      <td style="text-align:right">
+        <a class="detail-link" href="/machine?id=${encodeURIComponent(m.machine_id)}">Details ↗</a>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Totals row
+  const hasAny = machineData.some(x => x.earnings);
+  const sum24  = hasAny ? machineData.reduce((s, x) => s + (x.earnings?.t24 ?? 0), 0) : null;
+  const sum7   = hasAny ? machineData.reduce((s, x) => s + (x.earnings?.t7  ?? 0), 0) : null;
+  const sum30  = hasAny ? machineData.reduce((s, x) => s + (x.earnings?.t30 ?? 0), 0) : null;
+
+  const totalsRow = `<tr class="totals-row">
+    <td colspan="2"><span style="font-weight:700;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px">Total</span></td>
+    <td>${fmtEarn(sum24)}</td>
+    <td>${fmtEarn(sum7)}</td>
+    <td>${fmtEarn(sum30)}</td>
+    <td></td>
+  </tr>`;
+
+  wrap.innerHTML = `
+    <table class="machine-table">
+      <thead><tr>
+        <th>Machine</th>
+        <th>Rate</th>
+        <th>Last 24h</th>
+        <th>Last 7 days</th>
+        <th>Last 30 days</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}${totalsRow}</tbody>
+    </table>`;
+}
+
+// ── Summary bar ───────────────────────────────────────────────
+function fmt(v, d = 2) {
+  return v == null ? '—' : Number(v).toFixed(d);
+}
+
+function renderSummary(data) {
+  const { earnings_24h: h24, earnings_30d: h30, earnings_1h: h1,
+          est_next_24h: est, balance_current: cur, balance_lifetime: life } = data;
+  const hasCur = cur != null, hasLife = life != null;
+
+  const balHtml = (hasCur || hasLife) ? `
+    <div class="s-divider strong"></div>
+    <div class="s-group">
+      ${hasCur ? `<div class="summary-stat">
+        <span class="s-label">Current balance</span>
+        <span class="s-value blue">${_balanceVisible ? '$'+fmt(cur) : '••••••'}</span>
+      </div>` : ''}
+      ${hasCur && hasLife ? '<div class="s-divider"></div>' : ''}
+      ${hasLife ? `<div class="summary-stat">
+        <span class="s-label">Lifetime</span>
+        <span class="s-value blue">${_balanceVisible ? '$'+fmt(life) : '••••••'}</span>
+      </div>` : ''}
+      <button onclick="toggleBalance()" style="background:none;border:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;padding:0 4px">
+        ${_balanceVisible ? eyeOpenSvg : eyeOffSvg}
+      </button>
+    </div>` : '';
+
+  document.getElementById('summary-wrap').innerHTML = `
+    <div class="summary-bar">
+      <div class="s-group">
+        <div class="summary-stat">
+          <span class="s-label">Last 24h</span>
+          <span class="s-value">$${fmt(h24)}</span>
+        </div>
+        <div class="s-divider"></div>
+        <div class="summary-stat">
+          <span class="s-label">Last 30 days</span>
+          <span class="s-value">$${fmt(h30)}</span>
+        </div>
+      </div>
+      <div class="s-divider strong"></div>
+      <div class="s-group">
+        <div class="summary-stat">
+          <span class="s-label">Last 1h</span>
+          <span class="s-value purple">$${fmt(h1)}</span>
+        </div>
+        <span class="s-arrow">→</span>
+        <div class="summary-stat">
+          <span class="s-label">Est. next 24h</span>
+          <span class="s-value purple">$${fmt(est)}</span>
+        </div>
+      </div>
+      ${balHtml}
+    </div>`;
+}
+
+function toggleBalance() {
+  _balanceVisible = !_balanceVisible;
+  localStorage.setItem('sm_balance_visible', _balanceVisible ? 'true' : 'false');
+  if (_overview) renderSummary(_overview);
+}
+
+// ── Chart highlight on table hover ───────────────────────────
+function highlightMachine(machineId) {
+  if (document.getElementById('show-total').checked) return;
+  if (!_stackedChart) return;
+  _stackedChart.data.datasets.forEach((ds, i) => {
+    if (ds.type === 'line') return;  // keep total line untouched
+    const [bg, border] = PALETTE[i % PALETTE.length];
+    if (ds.label === machineId) {
+      ds.backgroundColor = bg;
+      ds.borderColor     = border;
+    } else {
+      const bgAlpha     = _chartType === 'line' ? '0.03)' : '0.08)';
+      const borderAlpha = _chartType === 'line' ? '0.06)' : '0.15)';
+      ds.backgroundColor = bg.replace(/[\d.]+\)$/, bgAlpha);
+      ds.borderColor     = border.replace(/[\d.]+\)$/, borderAlpha);
+    }
+  });
+  _stackedChart.update();
+}
+
+function clearHighlight() {
+  if (!_stackedChart) return;
+  _stackedChart.data.datasets.forEach((ds, i) => {
+    if (ds.type === 'line') return;  // keep total line untouched
+    const [bg, border] = PALETTE[i % PALETTE.length];
+    ds.backgroundColor = bg;
+    ds.borderColor     = border;
+  });
+  _stackedChart.update();
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function fmtDate(dateStr) {
+  const [, m, d] = dateStr.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(m, 10) - 1] + ' ' + parseInt(d, 10);
+}
+
+function fmtHour(date) {
+  const h = date.getHours();
+  return (h % 12 || 12) + (h < 12 ? 'am' : 'pm');
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Init ──────────────────────────────────────────────────────
+
+// Restore saved chart preferences before first load
+(function applyChartPrefs() {
+  const range = localStorage.getItem('sm_earn_range');
+  if (range) document.getElementById('chart-range').value = range;
+
+  if (_chartType !== 'bar') {
+    document.getElementById('btn-bar').classList.remove('active');
+    document.getElementById('btn-line').classList.add('active');
+  }
+
+  const totals = localStorage.getItem('sm_earn_totals');
+  if (totals === 'true') document.getElementById('show-total').checked = true;
+})();
+
+(async () => {
+  try {
+    const r = await fetch('/api/auth_status');
+    if (r.status === 401) { overlay.classList.add('visible'); return; }
+    loadData();
+  } catch { loadData(); }
+})();
+</script>
+</body>
+</html>

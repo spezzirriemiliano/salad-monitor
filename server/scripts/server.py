@@ -21,10 +21,31 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from telegram_notifier import send_telegram_report
 
-VERSION = "v0.3"
+VERSION = "v0.4"
 _DEV_CONFIG     = Path(__file__).parent.parent / ".dev.config.json"
 _DEFAULT_CONFIG = Path(__file__).parent.parent / "config.json"
 CONFIG_PATH = _DEV_CONFIG if _DEV_CONFIG.exists() else _DEFAULT_CONFIG
+
+STATS_DIR = Path(__file__).parent.parent / "machines-stats"
+STATS_DIR.mkdir(exist_ok=True)
+STATS_RETENTION_HOURS = 24
+
+# Per-machine file locks to avoid concurrent writes on the same file
+_stats_locks: dict = {}
+_stats_locks_mutex = threading.Lock()
+
+def _get_stats_lock(machine_id: str) -> threading.Lock:
+    with _stats_locks_mutex:
+        if machine_id not in _stats_locks:
+            _stats_locks[machine_id] = threading.Lock()
+        return _stats_locks[machine_id]
+
+def _bucket_ts(dt=None, seconds=60) -> str:
+    """Round a datetime to the nearest bucket (default: 1 minute)."""
+    if dt is None:
+        dt = datetime.now(timezone.utc)
+    ts = int(dt.timestamp())
+    return datetime.fromtimestamp(round(ts / seconds) * seconds, tz=timezone.utc).isoformat()
 
 app = Flask(__name__)
 
@@ -54,9 +75,13 @@ _earnings_trigger_lock = threading.Lock()
 latest_salad_version: str = ""
 latest_version_lock = threading.Lock()
 
-# Earnings history: { "24h": float, "30d": float }
+# Earnings history: { "24h": float, "30d": float, "1h": float }
 earnings_history: dict = {}
 earnings_history_lock = threading.Lock()
+
+# Raw 30-day daily earnings: { "2024-01-15": 0.50, ... }
+earnings_history_raw: dict = {}
+earnings_history_raw_lock = threading.Lock()
 
 # Bandwidth history: { machine_id: deque([{ uploaded_mb, downloaded_mb, ts }]) }
 bandwidth_history: dict = {}
@@ -66,6 +91,11 @@ BW_HISTORY_MAXLEN = 1440  # 24h at 60s intervals
 # Balance: { "current": float, "lifetime": float }
 balance_cache: dict = {}
 balance_lock = threading.Lock()
+
+# Earnings history cache: { salad_machine_id: { "data": dict, "ts": float } }
+_earnings_history_cache: dict = {}
+_earnings_history_cache_lock = threading.Lock()
+EARNINGS_HISTORY_CACHE_TTL = 30 * 60  # 30 minutes
 
 # Telegram notifications toggle
 telegram_enabled: bool = True
@@ -137,6 +167,7 @@ def fetch_earnings_history():
         total_30d = 0.0
         total_24h = 0.0
         total_1h  = 0.0
+        daily: dict = {}
         for ts_str, val in data.items():
             try:
                 ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
@@ -145,6 +176,9 @@ def fetch_earnings_history():
                     total_24h += val
                 if ts >= cutoff_1h:
                     total_1h += val
+                # Accumulate by UTC date (key = "YYYY-MM-DD")
+                day_key = ts.strftime("%Y-%m-%d")
+                daily[day_key] = round(daily.get(day_key, 0.0) + val, 6)
             except Exception:
                 continue
 
@@ -152,6 +186,10 @@ def fetch_earnings_history():
             earnings_history["1h"]  = round(total_1h,  4)
             earnings_history["24h"] = round(total_24h, 4)
             earnings_history["30d"] = round(total_30d, 4)
+
+        with earnings_history_raw_lock:
+            earnings_history_raw.clear()
+            earnings_history_raw.update(daily)
 
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Earnings history: 1h=${total_1h:.4f} 24h=${total_24h:.4f} 30d=${total_30d:.4f}")
 
@@ -280,6 +318,94 @@ def _bw_totals(history_deque, now):
         "1h":  {"uploaded_mb": round(up_1h,  1), "downloaded_mb": round(dn_1h,  1)},
         "24h": {"uploaded_mb": round(up_24h, 1), "downloaded_mb": round(dn_24h, 1)},
     }
+
+
+import re as _re
+_SAFE_ID = _re.compile(r'^[\w\-]{1,64}$')
+
+def _safe_machine_id(machine_id: str) -> str | None:
+    """Return machine_id only if it's safe to use as a filename, else None."""
+    return machine_id if _SAFE_ID.match(machine_id) else None
+
+
+def append_machine_stat(machine_id: str, data: dict):
+    """Append one bucketed stat entry to machines-stats/{machine_id}.json (NDJSON).
+    Entries older than STATS_RETENTION_HOURS are dropped on each write.
+    """
+    if not _safe_machine_id(machine_id):
+        return
+    bw   = data.get("bandwidth") or {}
+    gpus = data.get("gpus", [])
+    if isinstance(gpus, dict):
+        gpus = [gpus] if gpus else []
+
+    gpu_entries = []
+    for g in gpus:
+        mem_used_mb  = g.get("memory_used_mb")
+        mem_total_mb = g.get("memory_total_mb")
+        gpu_entries.append({
+            "util":      g.get("utilization_pct"),
+            "temp":      g.get("temperature_c"),
+            "mem_pct":   g.get("memory_utilization_pct"),
+            "mem_gb":    round(mem_used_mb  / 1024, 2) if mem_used_mb  is not None else None,
+            "mem_total_gb": round(mem_total_mb / 1024, 2) if mem_total_mb is not None else None,
+            "power":     g.get("power_w"),
+            "fan":       g.get("fan_speed_pct"),
+        })
+
+    ram_used_gb  = data.get("ram_used_gb")
+    ram_total_gb = data.get("ram_total_gb")
+    entry = {
+        "ts":           _bucket_ts(),
+        "cpu":          data.get("cpu_pct"),
+        "ram_pct":      data.get("ram_used_pct"),
+        "ram_gb":       round(ram_used_gb,  2) if ram_used_gb  is not None else None,
+        "ram_total_gb": round(ram_total_gb, 2) if ram_total_gb is not None else None,
+        "disk_pct": data.get("disk_used_pct"),
+        "uptime_h": data.get("uptime_hours"),
+        "mode":     data.get("mode"),
+        "gpus":     gpu_entries,
+        "up_mbps":  bw.get("upload_mbps"),
+        "dn_mbps":  bw.get("download_mbps"),
+    }
+
+    path    = STATS_DIR / f"{machine_id}.json"
+    cutoff  = datetime.now(timezone.utc) - timedelta(hours=STATS_RETENTION_HOURS)
+    lock    = _get_stats_lock(machine_id)
+
+    with lock:
+        lines = []
+        last_ts = None
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        rec_ts = datetime.fromisoformat(rec["ts"])
+                        if rec_ts >= cutoff:
+                            lines.append(line)
+                            last_ts = rec_ts
+                    except Exception:
+                        pass
+
+        # Border case: rounding near the 30s mark can cause a report to skip a
+        # bucket (gap ~120s instead of ~60s). If detected, insert a bridge entry
+        # for the missing bucket so the chart stays continuous.
+        new_ts = datetime.fromisoformat(entry["ts"])
+        if last_ts is not None:
+            gap = (new_ts - last_ts).total_seconds()
+            if 90 <= gap < 180:
+                bridge = dict(entry)
+                bridge["ts"] = (new_ts - timedelta(seconds=60)).isoformat()
+                lines.append(json.dumps(bridge, separators=(",", ":")))
+
+        lines.append(json.dumps(entry, separators=(",", ":")))
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
 
 
 def load_config():
@@ -474,6 +600,8 @@ def receive_report():
                     _last_earnings_trigger = now_ts
                     threading.Thread(target=fetch_salad_earnings, daemon=True).start()
 
+    threading.Thread(target=append_machine_stat, args=(machine_id, data), daemon=True).start()
+
     return jsonify({"status": "ok"}), 200
 
 
@@ -509,6 +637,81 @@ def get_status():
 @app.route("/dashboard")
 def dashboard():
     return send_from_directory(Path(__file__).parent, "dashboard.html")
+
+
+@app.route("/machine")
+def machine_page():
+    return send_from_directory(Path(__file__).parent, "machine.html")
+
+
+@app.route("/earnings")
+def earnings_page():
+    return send_from_directory(Path(__file__).parent, "earnings.html")
+
+
+@app.route("/api/earnings-overview", methods=["GET"])
+def api_earnings_overview():
+    err = _require_auth()
+    if err: return err
+
+    with earnings_history_lock:
+        h_snap = dict(earnings_history)
+    with earnings_history_raw_lock:
+        raw_snap = dict(earnings_history_raw)
+    with balance_lock:
+        b_snap = dict(balance_cache)
+    with earnings_lock:
+        e_snap = dict(earnings_cache)
+    with store_lock:
+        store_snap = dict(metrics_store)
+    with expected_machines_lock:
+        exp_snap = dict(expected_machines)
+
+    now = datetime.now(timezone.utc)
+
+    # Build sorted daily list
+    daily = sorted(
+        [{"date": k, "amount": round(v, 4)} for k, v in raw_snap.items()],
+        key=lambda x: x["date"]
+    )
+
+    # Build per-machine list
+    machines = []
+    for mid, salad_id in exp_snap.items():
+        m = store_snap.get(mid, {})
+        received_at = m.get("received_at", "")
+        status = "never"
+        if received_at:
+            try:
+                received = datetime.fromisoformat(received_at)
+                stale = (now - received) > timedelta(minutes=STALE_THRESHOLD_MINUTES)
+                status = "stale" if stale else ("online" if m.get("salad_running") else "offline")
+            except Exception:
+                pass
+        machines.append({
+            "machine_id":       mid,
+            "salad_machine_id": salad_id,
+            "earning_rate":     e_snap.get(mid),
+            "status":           status,
+            "cpu_name":         m.get("cpu_name"),
+            "gpus":             m.get("gpus", []),
+        })
+
+    est_next_24h = None
+    h1 = h_snap.get("1h")
+    if h1 is not None:
+        est_next_24h = round(h1 * 24, 4)
+
+    return jsonify({
+        "earnings_1h":    h_snap.get("1h"),
+        "earnings_24h":   h_snap.get("24h"),
+        "earnings_30d":   h_snap.get("30d"),
+        "est_next_24h":   est_next_24h,
+        "balance_current":  b_snap.get("current"),
+        "balance_lifetime": b_snap.get("lifetime"),
+        "daily":    daily,
+        "machines": machines,
+    })
 
 
 @app.route("/api/dashboard")
@@ -616,6 +819,76 @@ def api_dashboard():
     })
 
 
+@app.route("/api/earnings/<salad_machine_id>", methods=["GET"])
+def get_machine_earnings(salad_machine_id: str):
+    err = _require_auth()
+    if err: return err
+
+    salad_cfg = config.get("salad_api", {})
+    auth = salad_cfg.get("auth_cookie", "")
+    cf   = salad_cfg.get("cf_clearance", "")
+
+    if not auth:
+        return jsonify({"error": "Salad API not configured"}), 503
+
+    cookies = {"auth": auth}
+    if cf:
+        cookies["cf_clearance"] = cf
+
+    # Return cached response if still fresh
+    with _earnings_history_cache_lock:
+        cached = _earnings_history_cache.get(salad_machine_id)
+        if cached and (time.time() - cached["ts"]) < EARNINGS_HISTORY_CACHE_TTL:
+            return jsonify(cached["data"])
+
+    try:
+        r = req_lib.get(
+            f"https://app-api.salad.com/api/v2/machines/{salad_machine_id}/earning-history?timeframe=30d",
+            cookies=cookies, headers=SALAD_API_HEADERS, timeout=15,
+        )
+        if r.status_code == 401:
+            return jsonify({"error": "expired"}), 401
+        if r.status_code != 200:
+            return jsonify({"error": f"HTTP {r.status_code}"}), r.status_code
+        data = r.json()
+        with _earnings_history_cache_lock:
+            _earnings_history_cache[salad_machine_id] = {"data": data, "ts": time.time()}
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/stats/<machine_id>", methods=["GET"])
+def get_machine_stats(machine_id: str):
+    err = _require_auth()
+    if err: return err
+
+    if not _safe_machine_id(machine_id):
+        return jsonify({"error": "Invalid machine_id"}), 400
+
+    path = STATS_DIR / f"{machine_id}.json"
+    if not path.exists():
+        return jsonify([])
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=STATS_RETENTION_HOURS)
+    records = []
+    lock = _get_stats_lock(machine_id)
+    with lock:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    if datetime.fromisoformat(rec["ts"]) >= cutoff:
+                        records.append(rec)
+                except Exception:
+                    pass
+
+    return jsonify(records)
+
+
 @app.route("/api/telegram", methods=["GET"])
 def get_telegram_status():
     err = _require_auth()
@@ -708,7 +981,7 @@ def main():
     )
     scheduler.add_job(fetch_salad_earnings,        "interval", minutes=5,  id="salad_earnings")
     scheduler.add_job(fetch_earnings_history,      "interval", minutes=30, id="salad_history")
-    scheduler.add_job(fetch_latest_salad_version,  "interval", hours=6,   id="salad_version")
+    scheduler.add_job(fetch_latest_salad_version,  "interval", minutes=30, id="salad_version")
     scheduler.add_job(fetch_balance,               "interval", minutes=10, id="salad_balance")
     scheduler.start()
     threading.Thread(target=fetch_salad_earnings,       daemon=True).start()

@@ -487,10 +487,12 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px 16px;
+      padding-right: 120px;
       display: flex;
       gap: 24px;
-      align-items: center;
+      align-items: flex-start;
       flex-wrap: wrap;
+      position: relative;
     }
     .earnings-stat {
       display: flex;
@@ -534,15 +536,13 @@
       gap: 12px;
     }
     .earnings-bar-right {
-      margin-left: auto;
       display: flex;
       align-items: center;
       gap: 8px;
     }
     @media (max-width: 600px) {
-      .earnings-bar { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .earnings-bar { flex-direction: column; gap: 10px; }
       .earnings-bar > .earnings-divider.strong { display: none; }
-      .earnings-bar-right { margin-left: 0; }
     }
     .balance-stat {
       display: flex;
@@ -649,6 +649,59 @@
     .alert-pill.a-yellow     { background: rgba(210,153,34,.12); color: var(--yellow); border: 1px solid rgba(210,153,34,.35); }
     .alert-pill.a-green      { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.4); }
     .alert-pill.a-dim-orange { background: rgba(227,116,43,.07); color: #a0622a;       border: 1px solid rgba(227,116,43,.2); }
+
+    /* ── Stats button ── */
+    .stats-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      width: 100%;
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      transition: background .15s, color .15s, border-color .15s;
+      margin-top: 4px;
+      text-decoration: none;
+    }
+    .stats-btn:hover { background: #30363d; color: var(--blue); border-color: rgba(88,166,255,.4); }
+    .compact-detail-btn {
+      display: none;
+      align-items: center; justify-content: center;
+      background: #21262d; border: 1px solid var(--border);
+      color: var(--muted); border-radius: 5px;
+      font-size: 10px; font-weight: 700;
+      padding: 1px 5px; text-decoration: none;
+      transition: background .15s, color .15s, border-color .15s;
+      line-height: 1.6;
+    }
+    .compact-detail-btn:hover { background: #30363d; color: var(--blue); border-color: rgba(88,166,255,.4); }
+    #grid.view-compact .compact-detail-btn { display: flex; }
+    #grid.view-compact .stats-btn { display: none; }
+
+    .earnings-details-btn {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      padding: 6px 12px;
+      margin-left: 16px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #58a6ff;
+      background: rgba(88,166,255,.08);
+      border: 1px solid rgba(88,166,255,.25);
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    .earnings-details-btn:hover { color: #79bfff; background: rgba(88,166,255,.15); border-color: rgba(88,166,255,.5); }
 
     /* ── Version badge ── */
     .version-badge {
@@ -1151,6 +1204,7 @@
         <div class="earnings-divider strong"></div>
         <div class="earnings-group">${rightHtml}</div>
         ${balanceHtml}
+        <a class="earnings-details-btn" href="/earnings">Details ↗</a>
       </div>`;
   }
 
@@ -1291,12 +1345,14 @@ const gpuHot = machines.filter(m => {
             ${fireHtml}${earnHtml}
             ${bwBadge}<span class="salad-badge ${saladClass} normal-only">${saladText}</span>
             ${bwBadge}<span class="salad-badge ${saladClass} compact-only">${m.salad_running ? 'ON' : 'OFF'}</span>
+            <a class="compact-detail-btn" href="/machine?id=${encodeURIComponent(m.machine_id)}">↗</a>
           </div>
         </div>
         <span class="machine-id">${m.machine_id}</span>
       </div>`;
     if (m.cpu_name) html += `<div class="hostname normal-only">${m.cpu_name}</div>`;
     if (m.ram_total_gb) html += `<div class="hostname normal-only">${Math.round(m.ram_total_gb)}GB RAM</div>`;
+    html += `<a class="stats-btn normal-only" href="/machine?id=${encodeURIComponent(m.machine_id)}">Details ↗</a>`;
 
     if (m.status === 'never') {
       html += `<div class="never-text normal-only">No data</div>`;
@@ -1520,6 +1576,7 @@ const gpuHot = machines.filter(m => {
   applySavedSort();
   applySaladIdBtn();
   checkAuth();
+
 </script>
 </body>
 </html>
