@@ -648,10 +648,26 @@
         : '—';
       const memStr = pct != null ? `${pct}% · ${fmt(gpu.memory_used_mb)}/${fmt(gpu.memory_total_mb)} MB` : '—';
 
+      const hc = tempClass(gpu.hotspot_c);
+      const hotBarColor = hc === 'crit' ? 'red' : hc === 'hot' ? 'orange' : hc === 'warm' ? 'yellow' : 'green';
+      const mc = tempClass(gpu.memory_junction_c ?? gpu.memory_temperature_c);
+      const memTempBarColor = mc === 'crit' ? 'red' : mc === 'hot' ? 'orange' : mc === 'warm' ? 'yellow' : 'green';
+      const memTempVal = gpu.memory_junction_c ?? gpu.memory_temperature_c;
+
       let gpuBody = `<div class="row">
-          <span class="label">Temp</span>
+          <span class="label" style="min-width:58px">GPU Temp</span>
           <div class="bar-wrap"><div class="bar-fill ${tempBarColor}" style="width:${Math.min(100,(gpu.temperature_c??0)/110*100)}%"></div></div>
           <span class="val ${tc}">${gpu.temperature_c != null ? gpu.temperature_c + '°C' : '—'}</span>
+        </div>`;
+      if (gpu.hotspot_c != null) gpuBody += `<div class="row">
+          <span class="label" style="min-width:58px">Hotspot</span>
+          <div class="bar-wrap"><div class="bar-fill ${hotBarColor}" style="width:${Math.min(100,(gpu.hotspot_c??0)/110*100)}%"></div></div>
+          <span class="val ${hc}">${gpu.hotspot_c}°C</span>
+        </div>`;
+      if (memTempVal != null) gpuBody += `<div class="row">
+          <span class="label" style="min-width:58px">Mem Temp</span>
+          <div class="bar-wrap"><div class="bar-fill ${memTempBarColor}" style="width:${Math.min(100,(memTempVal??0)/110*100)}%"></div></div>
+          <span class="val ${mc}">${memTempVal}°C</span>
         </div>`;
       gpuBody += barRow('Load', gpu.utilization_pct, `${fmt(gpu.utilization_pct)}%`, 'neutral');
       gpuBody += `<div class="row">
@@ -746,9 +762,13 @@
       ...(hasGpu ? [{
         title: 'GPU',
         defs: [
-          { id: 'ch-gutil', title: 'Utilization (%)',  data: v(r => r.gpus?.[0]?.util),                                                    color: '#3fb950', unit: '%',  max: 100        },
-          { id: 'ch-gtemp', title: 'Temperature (°C)', data: v(r => r.gpus?.[0]?.temp),                                                    color: '#e3742b', unit: '°C', max: null       },
-          { id: 'ch-gpow',  title: 'Power (W)',         data: v(r => r.gpus?.[0]?.power),                                                   color: '#f0e040', unit: 'W',  max: null       },
+          { id: 'ch-gutil',    title: 'Utilization (%)',    data: v(r => r.gpus?.[0]?.util),                                             color: '#3fb950', unit: '%',  max: 100  },
+          { id: 'ch-gtemp',    title: 'Temperature (°C)',  data: v(r => r.gpus?.[0]?.temp),                                             color: '#e3742b', unit: '°C', max: null },
+          ...(records.some(r => r.gpus?.[0]?.hotspot  != null) ? [
+          { id: 'ch-ghotspot', title: 'Hotspot (°C)',       data: v(r => r.gpus?.[0]?.hotspot),                                          color: '#ff6e40', unit: '°C', max: null }] : []),
+          ...(records.some(r => r.gpus?.[0]?.mem_temp != null) ? [
+          { id: 'ch-gmemtemp', title: 'Mem Temp (°C)',      data: v(r => r.gpus?.[0]?.mem_temp),                                         color: '#c792ea', unit: '°C', max: null }] : []),
+          { id: 'ch-gpow',     title: 'Power (W)',           data: v(r => r.gpus?.[0]?.power),                                           color: '#f0e040', unit: 'W',  max: null },
           { id: 'ch-gmem',  title: `VRAM (${_ramInGb ? 'GB' : '%'})`,
                                                         data: _ramInGb ? v(r => r.gpus?.[0]?.mem_gb) : v(r => r.gpus?.[0]?.mem_pct),        color: '#ff7b72', unit: _ramInGb ? 'GB' : '%', max: _ramInGb ? vramTotalGb : 100, gbToggle: true },
         ],

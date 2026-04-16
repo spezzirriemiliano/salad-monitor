@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import socket
 import time
@@ -21,7 +22,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from telegram_notifier import send_telegram_report
 
-VERSION = "v0.4"
+VERSION = "v0.5"
 _DEV_CONFIG     = Path(__file__).parent.parent / ".dev.config.json"
 _DEFAULT_CONFIG = Path(__file__).parent.parent / "config.json"
 CONFIG_PATH = _DEV_CONFIG if _DEV_CONFIG.exists() else _DEFAULT_CONFIG
@@ -320,8 +321,7 @@ def _bw_totals(history_deque, now):
     }
 
 
-import re as _re
-_SAFE_ID = _re.compile(r'^[\w\-]{1,64}$')
+_SAFE_ID = re.compile(r'^[\w\-]{1,64}$')
 
 def _safe_machine_id(machine_id: str) -> str | None:
     """Return machine_id only if it's safe to use as a filename, else None."""
@@ -346,6 +346,8 @@ def append_machine_stat(machine_id: str, data: dict):
         gpu_entries.append({
             "util":      g.get("utilization_pct"),
             "temp":      g.get("temperature_c"),
+            "hotspot":   g.get("hotspot_c"),
+            "mem_temp":  g.get("memory_junction_c") if g.get("memory_junction_c") is not None else g.get("memory_temperature_c"),
             "mem_pct":   g.get("memory_utilization_pct"),
             "mem_gb":    round(mem_used_mb  / 1024, 2) if mem_used_mb  is not None else None,
             "mem_total_gb": round(mem_total_mb / 1024, 2) if mem_total_mb is not None else None,
@@ -1015,5 +1017,22 @@ def main():
     app.run(host=host, port=port, debug=False, use_reloader=False)
 
 
+def check_for_update():
+    GREEN = "\033[92m"
+    RESET = "\033[0m"
+    try:
+        url = "https://raw.githubusercontent.com/spezzirriemiliano/salad-monitor/main/server/scripts/server.py"
+        r = req_lib.get(url, timeout=8)
+        m = re.search(r'VERSION\s*=\s*"(v[^"]+)"', r.text)
+        if not m:
+            return
+        remote = m.group(1)
+        if remote != VERSION:
+            print(f"{GREEN}[UPDATE] New version available: {remote} — run server_self_update.bat to update.{RESET}")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
+    check_for_update()
     main()

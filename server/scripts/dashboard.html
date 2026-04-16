@@ -302,6 +302,10 @@
     #grid.view-compact .card { padding: 10px 12px; gap: 6px; }
     .compact-only { display: none; }
     #grid.view-compact .compact-only { display: inline; }
+    .compact-gpu-stats { display: none; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
+    #grid.view-compact .compact-gpu-stats { display: flex; }
+    .cgs-item { cursor: default; white-space: nowrap; }
+    .cgs-key  { font-weight: 700; margin-right: 2px; opacity: 0.55; font-size: 10px; }
 
     /* ── View toggle button group ── */
     .view-btns {
@@ -794,6 +798,7 @@
       <option value="name">PC Name</option>
       <option value="earning">Earnings</option>
       <option value="gpu_temp">GPU Temp</option>
+      <option value="gpu_mem_temp">GPU Mem Temp</option>
       <option value="gpu_power">GPU Power</option>
     </select>
   </div>
@@ -870,8 +875,9 @@
     const val = m => {
       if (field === 'name')      return m.machine_id ?? '';
       if (field === 'earning')   return m.earning_rate ?? -1;
-      if (field === 'gpu_temp')  return (m.gpus?.[0]?.temperature_c) ?? -1;
-      if (field === 'gpu_power') return (m.gpus?.[0]?.power_w) ?? -1;
+      if (field === 'gpu_temp')     return (m.gpus?.[0]?.temperature_c) ?? -1;
+      if (field === 'gpu_mem_temp') return (m.gpus?.[0]?.memory_junction_c ?? m.gpus?.[0]?.memory_temperature_c) ?? -1;
+      if (field === 'gpu_power')    return (m.gpus?.[0]?.power_w) ?? -1;
       return 0;
     };
 
@@ -1116,15 +1122,32 @@
     const perf = g.perf_state != null ? `P${g.perf_state}` : '—';
 
     const tempBarColor = tc === 'crit' ? 'red' : tc === 'hot' ? 'orange' : tc === 'warm' ? 'yellow' : 'green';
+    const hc  = tempClass(g.hotspot_c);
+    const hotBarColor  = hc  === 'crit' ? 'red' : hc  === 'hot' ? 'orange' : hc  === 'warm' ? 'yellow' : 'green';
+    const memTempVal   = g.memory_junction_c ?? g.memory_temperature_c ?? null;
+    const mc  = tempClass(memTempVal);
+    const memTempBarColor = mc === 'crit' ? 'red' : mc === 'hot' ? 'orange' : mc === 'warm' ? 'yellow' : 'green';
 
     let html = `<div class="section-label">GPU · ${g.name ?? '—'}</div>`;
 
-    // ── Basic: Temp, Load, Fan ──
+    // ── Basic: Temp, Hotspot, Mem Temp, Load, Fan ──
     html += `
       <div class="row">
-        <span class="label">Temp</span>
+        <span class="label" style="min-width:58px">GPU Temp</span>
         <div class="bar-wrap"><div class="bar-fill ${tempBarColor}" style="width:${Math.min(100,(g.temperature_c??0)/110*100)}%"></div></div>
         <span class="val ${tc}">${g.temperature_c != null ? g.temperature_c+'°C' : '—'}</span>
+      </div>`;
+    if (g.hotspot_c != null) html += `
+      <div class="row">
+        <span class="label" style="min-width:58px">Hotspot</span>
+        <div class="bar-wrap"><div class="bar-fill ${hotBarColor}" style="width:${Math.min(100,(g.hotspot_c??0)/110*100)}%"></div></div>
+        <span class="val ${hc}">${g.hotspot_c}°C</span>
+      </div>`;
+    if (memTempVal != null) html += `
+      <div class="row">
+        <span class="label" style="min-width:58px">Mem Temp</span>
+        <div class="bar-wrap"><div class="bar-fill ${memTempBarColor}" style="width:${Math.min(100,(memTempVal??0)/110*100)}%"></div></div>
+        <span class="val ${mc}">${memTempVal}°C</span>
       </div>`;
     html += barRow('Load', g.utilization_pct, `${fmt(g.utilization_pct)}%`, 'neutral');
     html += `
@@ -1422,6 +1445,25 @@ const gpuHot = machines.filter(m => {
         <span style="color:var(--red);font-size:10px;font-family:monospace;letter-spacing:.3px">⚠ salad_machine_id not configured</span>
       </div>`;
     }
+    // ── Compact GPU stats row: L T H M F ──
+    if (gpu && !isBandwidth) {
+      const clr = { ok: 'var(--green)', warm: 'var(--yellow)', hot: 'var(--orange)', crit: 'var(--red)' };
+      const loadCls = gpu.utilization_pct >= 90 ? 'crit' : gpu.utilization_pct >= 75 ? 'hot' : gpu.utilization_pct >= 50 ? 'warm' : 'ok';
+      const memTempVal = gpu.memory_junction_c ?? gpu.memory_temperature_c ?? null;
+      const items = [
+        { key: 'L', label: 'GPU Load',  val: gpu.utilization_pct, unit: '%', color: 'var(--text)' },
+        { key: 'T', label: 'GPU Temp',  val: gpu.temperature_c,   unit: '°', color: clr[tempClass(gpu.temperature_c)] },
+        { key: 'H', label: 'Hotspot',   val: gpu.hotspot_c,       unit: '°', color: clr[tempClass(gpu.hotspot_c)] },
+        { key: 'M', label: 'Mem Temp',  val: memTempVal,          unit: '°', color: clr[tempClass(memTempVal)] },
+        { key: 'F', label: 'Fan',       val: gpu.fan_speed_pct,   unit: '%', color: 'var(--muted)' },
+      ].filter(i => i.val != null);
+      if (items.length) {
+        html += `<div class="compact-gpu-stats">${
+          items.map(i => `<span class="cgs-item" title="${i.label}: ${i.val}${i.unit}" style="color:${i.color}"><span class="cgs-key">${i.key}</span>${i.val}${i.unit}</span>`).join('')
+        }</div>`;
+      }
+    }
+
     html += `</div>`;
     return html;
   }

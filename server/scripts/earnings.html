@@ -715,6 +715,7 @@ function renderTable() {
   const rows = machineData.map(({ m, earnings, paletteIdx }) => {
     const [bg] = paletteIdx >= 0 ? PALETTE[paletteIdx % PALETTE.length] : ['transparent'];
     const rate = m.earning_rate != null ? '$' + m.earning_rate.toFixed(4) + '/hr' : '—';
+    const rateColor = (m.earning_rate == null || m.earning_rate === 0) ? 'var(--muted)' : 'var(--green)';
     const rawGpu  = m.gpus && m.gpus.length > 0 ? m.gpus[0].name || '' : '';
     const gpuName = rawGpu.replace(/^(NVIDIA\s+)?(GeForce\s+)?/i, '').trim();
 
@@ -731,7 +732,7 @@ function renderTable() {
           </div>
         </div>
       </td>
-      <td><span class="rate-val">${rate}</span></td>
+      <td><span class="rate-val" style="color:${rateColor}">${rate}</span></td>
       <td>${fmtEarn(earnings?.t24)}</td>
       <td>${fmtEarn(earnings?.t7)}</td>
       <td>${fmtEarn(earnings?.t30)}</td>

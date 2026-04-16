@@ -28,6 +28,9 @@ $DevConfigPath = Join-Path $ScriptDir ".dev.salad_agent_config.json"
 $ConfigPath    = if (Test-Path $DevConfigPath) { $DevConfigPath } else { Join-Path $ScriptDir "salad_agent_config.json" }
 $TaskName    = "SaladMonitorAgent"
 
+$LhmDir     = Join-Path $ScriptDir "lhm"
+$LhmDllPath = Join-Path $LhmDir "LibreHardwareMonitorLib.dll"
+
 # ── Install / uninstall scheduled task ──────────────────────
 
 if ($Uninstall) {
@@ -71,11 +74,21 @@ $ApiKey          = $cfg.api_key
 $IntervalSeconds = if ($cfg.interval_seconds) { [int][Math]::Min([long]$cfg.interval_seconds, [int]::MaxValue) } else { 60 }
 $CachedSaladMachineId = $cfg.salad_machine_id
 
-$Version = "v0.4"
+$Version = "v0.5"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
 Write-Host "[INFO] Interval   : ${IntervalSeconds}s"
+
+# ── Version check ────────────────────────────────────────────
+try {
+    $rawUrl = "https://raw.githubusercontent.com/spezzirriemiliano/salad-monitor/main/agent/salad_agent.bat"
+    $remote = (Invoke-WebRequest $rawUrl -UseBasicParsing -TimeoutSec 8).Content
+    $remoteVersion = if ($remote -match '\$Version\s*=\s*"(v[^"]+)"') { $Matches[1] } else { $null }
+    if ($remoteVersion -and $remoteVersion -ne $Version) {
+        Write-Host "[UPDATE] New version available: $remoteVersion — run agent_self_update.bat to update." -ForegroundColor Green
+    }
+} catch { }
 
 # ── Salad process names ──────────────────────────────────────
 
@@ -275,6 +288,95 @@ function Get-GpuMetrics {
     return $gpus
 }
 
+# ── LibreHardwareMonitor ─────────────────────────────────────
+
+function Get-LhmTypes($asm) {
+    # GetExportedTypes may throw ReflectionTypeLoadException if dependencies are missing;
+    # in that case return only the types that loaded successfully.
+    try { return $asm.GetExportedTypes() }
+    catch [System.Reflection.ReflectionTypeLoadException] {
+        return $_.Exception.Types | Where-Object { $null -ne $_ }
+    }
+}
+
+function Initialize-Lhm {
+    if (-not (Test-Path $LhmDllPath)) { return $false }
+    try {
+        $asm = [System.Reflection.Assembly]::LoadFrom($LhmDllPath)
+        if (-not $asm) { throw "LoadFrom returned null for $LhmDllPath" }
+
+        $allTypes = Get-LhmTypes $asm
+
+        # Look up the Computer type (namespace may vary between versions)
+        $computerType = $asm.GetType("LibreHardwareMonitor.Hardware.Computer")
+        if (-not $computerType) {
+            $computerType = $allTypes | Where-Object { $_.Name -eq "Computer" } | Select-Object -First 1
+        }
+        if (-not $computerType) { throw "Type 'Computer' not found in assembly. Available types: $(($allTypes | Select-Object -ExpandProperty FullName) -join ', ')" }
+
+        # Find parameterless constructor (public or non-public)
+        $bf = [System.Reflection.BindingFlags]'Public,NonPublic,Instance'
+        $ctor = $computerType.GetConstructor($bf, $null, [Type[]]@(), $null)
+        if (-not $ctor) { throw "No parameterless constructor found in '$($computerType.FullName)'" }
+
+        $script:LhmComputer = $ctor.Invoke($null)
+        if (-not $script:LhmComputer) { throw "Constructor returned null" }
+
+        # Enable GPU monitoring
+        $gpuProp = $computerType.GetProperty("IsGpuEnabled")
+        if ($gpuProp) { $gpuProp.SetValue($script:LhmComputer, $true) }
+
+        $computerType.GetMethod("Open").Invoke($script:LhmComputer, $null)
+
+        # Cache SensorType.Temperature enum value for use in Read-LhmSensors
+        $sensorTypeEnum = $asm.GetType("LibreHardwareMonitor.Hardware.SensorType")
+        if (-not $sensorTypeEnum) {
+            $sensorTypeEnum = $allTypes | Where-Object { $_.Name -eq "SensorType" } | Select-Object -First 1
+        }
+        if ($sensorTypeEnum) {
+            $script:LhmTempSensorType = [Enum]::Parse($sensorTypeEnum, "Temperature")
+        }
+
+        Write-Host "[INFO] LibreHardwareMonitor loaded successfully."
+        return $true
+    } catch {
+        Write-Host "[WARN] Failed to load LibreHardwareMonitor: $_"
+        $script:LhmComputer       = $null
+        $script:LhmTempSensorType = $null
+        return $false
+    }
+}
+
+function Read-LhmSensors($hw, $out) {
+    $hw.Update()
+    $idx = ($hw.Identifier.ToString().TrimStart('/').Split('/'))[-1]
+    foreach ($sensor in $hw.Sensors) {
+        if ($sensor.SensorType -eq $script:LhmTempSensorType -and $null -ne $sensor.Value) {
+            $n = $sensor.Name.ToLower()
+            if ($n -like '*memory junction*') {
+                if (-not $out.ContainsKey($idx)) { $out[$idx] = @{} }
+                $out[$idx]['memory_junction_c'] = [Math]::Round([float]$sensor.Value, 1)
+            } elseif ($n -like '*hot spot*' -or $n -like '*hotspot*') {
+                if (-not $out.ContainsKey($idx)) { $out[$idx] = @{} }
+                $out[$idx]['hotspot_c'] = [Math]::Round([float]$sensor.Value, 1)
+            }
+        }
+    }
+    foreach ($sub in $hw.SubHardware) { Read-LhmSensors $sub $out }
+}
+
+function Get-GpuExtraTemps {
+    $result = @{}
+    if ($null -eq $script:LhmComputer) { return $result }
+    try {
+        foreach ($hw in $script:LhmComputer.Hardware) { Read-LhmSensors $hw $result }
+    } catch { }
+    return $result
+}
+
+$script:LhmComputer       = $null
+$script:LhmTempSensorType = $null
+
 function Get-SystemMetrics {
     $cpu   = [Math]::Round((Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor `
                  -Filter "Name='_Total'").PercentProcessorTime, 1)
@@ -360,6 +462,9 @@ if ($CachedSaladMachineId) {
     }
 }
 
+# Load LHM if the DLL is present (once at startup, fails silently)
+Initialize-Lhm | Out-Null
+
 # ── Main loop ────────────────────────────────────────────────
 
 $PrevNetSample       = $null
@@ -370,6 +475,27 @@ while ($true) {
     try {
         $sys          = Get-SystemMetrics
         $gpus         = Get-GpuMetrics
+
+        # Enrich GPU temperatures via LHM if it loaded successfully
+        if ($null -ne $script:LhmComputer) {
+            $extraTemps = Get-GpuExtraTemps
+            foreach ($g in @($gpus)) {
+                $idxStr = "$($g.index)"
+                if ($extraTemps.ContainsKey($idxStr)) {
+                    $extra = $extraTemps[$idxStr]
+                    if ($null -eq $g.memory_temperature_c -and $null -ne $extra.memory_junction_c) {
+                        $g.memory_temperature_c = $extra.memory_junction_c
+                    }
+                    if ($null -ne $extra.hotspot_c) {
+                        $g | Add-Member -NotePropertyName "hotspot_c"          -NotePropertyValue $extra.hotspot_c          -Force
+                    }
+                    if ($null -ne $extra.memory_junction_c) {
+                        $g | Add-Member -NotePropertyName "memory_junction_c"  -NotePropertyValue $extra.memory_junction_c  -Force
+                    }
+                }
+            }
+        }
+
         $saladRunning = Is-SaladRunning
         $oxyRunning   = $null -ne (Get-Process -Name "oxy" -ErrorAction SilentlyContinue)
         $mode         = if ($oxyRunning) { "bandwidth" } elseif ($saladRunning) { "gpu" } else { "idle" }
@@ -425,7 +551,10 @@ while ($true) {
             $gpuArr = @($gpus)
             if ($gpuArr.Count -gt 0) {
                 $g = $gpuArr[0]
-                $gpuInfo = " | GPU:$($g.utilization_pct)% Temp:$($g.temperature_c)C Fan:$($g.fan_speed_pct)%"
+                $gpuInfo = " | GPU:$($g.utilization_pct)% Temp:$($g.temperature_c)C"
+                if ($null -ne $g.memory_junction_c) { $gpuInfo += " MemJ:$($g.memory_junction_c)C" }
+                if ($null -ne $g.hotspot_c)         { $gpuInfo += " Hot:$($g.hotspot_c)C" }
+                $gpuInfo += " Fan:$($g.fan_speed_pct)%"
             }
             Write-Host "[$ts] [$status] Salad:$salad CPU:$($sys.cpu_pct)%$modeInfo$gpuInfo"
         }
