@@ -74,7 +74,7 @@ $ApiKey          = $cfg.api_key
 $IntervalSeconds = if ($cfg.interval_seconds) { [int][Math]::Min([long]$cfg.interval_seconds, [int]::MaxValue) } else { 60 }
 $CachedSaladMachineId = $cfg.salad_machine_id
 
-$Version = "v0.5"
+$Version = "v0.6"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
@@ -353,12 +353,14 @@ function Read-LhmSensors($hw, $out) {
     foreach ($sensor in $hw.Sensors) {
         if ($sensor.SensorType -eq $script:LhmTempSensorType -and $null -ne $sensor.Value) {
             $n = $sensor.Name.ToLower()
+            $val = [Math]::Round([float]$sensor.Value, 1)
+            if ($val -ge 255) { continue }  # 255 = driver sentinel for unsupported sensor
             if ($n -like '*memory junction*') {
                 if (-not $out.ContainsKey($idx)) { $out[$idx] = @{} }
-                $out[$idx]['memory_junction_c'] = [Math]::Round([float]$sensor.Value, 1)
+                $out[$idx]['memory_junction_c'] = $val
             } elseif ($n -like '*hot spot*' -or $n -like '*hotspot*') {
                 if (-not $out.ContainsKey($idx)) { $out[$idx] = @{} }
-                $out[$idx]['hotspot_c'] = [Math]::Round([float]$sensor.Value, 1)
+                $out[$idx]['hotspot_c'] = $val
             }
         }
     }
@@ -378,25 +380,37 @@ $script:LhmComputer       = $null
 $script:LhmTempSensorType = $null
 
 function Get-SystemMetrics {
-    $cpu   = [Math]::Round((Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor `
-                 -Filter "Name='_Total'").PercentProcessorTime, 1)
-    $os    = Get-CimInstance Win32_OperatingSystem
-    $ramPct = [Math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) /
-                             $os.TotalVisibleMemorySize * 100, 1)
-    $ramUsedGb  = [Math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / 1MB, 1)
-    $ramTotalGb = [Math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-    $disk = Get-PSDrive C -ErrorAction SilentlyContinue
-    $diskPct = if ($disk -and $disk.Used + $disk.Free -gt 0) {
-        [Math]::Round($disk.Used / ($disk.Used + $disk.Free) * 100, 1)
-    } else { $null }
+    try {
+        $cpu = (Get-CimInstance Win32_Processor |
+                Measure-Object -Property LoadPercentage -Average).Average
+    } catch { $cpu = 0 }
+
+    try {
+        $os         = Get-CimInstance Win32_OperatingSystem
+        $ramUsed    = $os.TotalVisibleMemorySize - $os.FreePhysicalMemory
+        $ramPct     = $ramUsed / $os.TotalVisibleMemorySize * 100
+        $ramUsedGb  = $ramUsed / 1MB
+        $ramTotalGb = $os.TotalVisibleMemorySize / 1MB
+        $uptime     = ((Get-Date) - $os.LastBootUpTime).TotalHours
+    } catch {
+        $ramPct = 0; $ramUsedGb = 0; $ramTotalGb = 0; $uptime = 0
+    }
+
+    $diskPct = $null
+    try {
+        $disk = Get-PSDrive C
+        if ($disk.Used + $disk.Free -gt 0) {
+            $diskPct = [Math]::Round($disk.Used / ($disk.Used + $disk.Free) * 100, 1)
+        }
+    } catch { }
 
     return @{
         cpu_pct       = [Math]::Round($cpu, 1)
-        ram_used_pct  = $ramPct
-        ram_used_gb   = $ramUsedGb
-        ram_total_gb  = $ramTotalGb
+        ram_used_pct  = [Math]::Round($ramPct, 1)
+        ram_used_gb   = [Math]::Round($ramUsedGb, 1)
+        ram_total_gb  = [Math]::Round($ramTotalGb, 1)
         disk_used_pct = $diskPct
-        uptime_hours  = [Math]::Round(((Get-Date) - $os.LastBootUpTime).TotalHours, 1)
+        uptime_hours  = [Math]::Round($uptime, 1)
     }
 }
 
