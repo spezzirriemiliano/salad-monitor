@@ -14,6 +14,7 @@ exit /b
 $ApiBase   = "https://api.github.com/repos/spezzirriemiliano/salad-monitor"
 $RepoPath  = "agent"
 $ScriptDir = Split-Path $env:BAT_PATH
+$Auto      = ($args -contains "/auto") -or ($env:AGENT_AUTO_UPDATE -eq "1")
 
 # Files and folders to never overwrite / scan
 $SkipFiles = @("salad_agent_config.json", ".dev.salad_agent_config.json")
@@ -43,11 +44,11 @@ function Get-RepoFiles($repoPath) {
     $result = @()
     foreach ($item in $items) {
         if ($item.type -eq "dir") {
-            if ($script:SkipDirs -notcontains $item.name) {
+            if ($SkipDirs -notcontains $item.name) {
                 $result += Get-RepoFiles $item.path
             }
         } elseif ($item.type -eq "file") {
-            if ($script:SkipFiles -notcontains $item.name) {
+            if ($SkipFiles -notcontains $item.name) {
                 $result += $item
             }
         }
@@ -87,7 +88,7 @@ Write-Host ""
 if ($localVersion -and $localVersion -eq $remoteVersion) {
     Write-Host "  Already up to date ($localVersion). No update needed." -ForegroundColor Green
     Write-Host ""
-    Read-Host "  Press Enter to close"
+    if (-not $Auto) { Read-Host "  Press Enter to close" }
     exit 0
 }
 
@@ -98,12 +99,14 @@ if ($localVersion) {
     Write-Host "  Remote version: $remoteVersion" -ForegroundColor Yellow
 }
 Write-Host "  Files to update: $($allFiles.Count)"
-$resp = Read-Host "  Download and install update? (y/n)"
-if ($resp.Trim().ToLower() -ne "y") {
-    Write-Host "  Update cancelled."
-    Write-Host ""
-    Read-Host "  Press Enter to close"
-    exit 0
+if (-not $Auto) {
+    $resp = Read-Host "  Download and install update? (y/n)"
+    if ($resp.Trim().ToLower() -ne "y") {
+        Write-Host "  Update cancelled."
+        Write-Host ""
+        Read-Host "  Press Enter to close"
+        exit 0
+    }
 }
 
 # ── Download all scanned files ───────────────────────────────
@@ -112,6 +115,7 @@ $downloaded = @()
 $errors     = 0
 foreach ($f in $allFiles) {
     $relativePath = $f.path -replace "^$RepoPath/", ""
+    if ($SkipFiles -contains $f.name) { continue }
     $localPath    = Join-Path $ScriptDir ($relativePath -replace "/", "\")
     $localDir     = Split-Path $localPath
 
@@ -129,8 +133,9 @@ foreach ($f in $allFiles) {
 }
 
 # ── Download config if missing ───────────────────────────────
-$configLocal = Join-Path $ScriptDir "salad_agent_config.json"
-if (-not (Test-Path $configLocal)) {
+$configLocal    = Join-Path $ScriptDir "salad_agent_config.json"
+$configLocalDev = Join-Path $ScriptDir ".dev.salad_agent_config.json"
+if (-not $Auto -and -not (Test-Path $configLocal) -and -not (Test-Path $configLocalDev)) {
     Write-Host "  salad_agent_config.json not found locally — downloading template..." -NoNewline
     try {
         $configRemote = $allFiles | Where-Object { $_.name -eq "salad_agent_config.json" } | Select-Object -First 1
@@ -158,10 +163,10 @@ if ($downloaded.Count -gt 0) {
 
 if ($errors -eq 0) {
     Write-Host "  Update complete! Agent is now at $remoteVersion." -ForegroundColor Green
-    Write-Host "  Restart the agent for the changes to take effect." -ForegroundColor Cyan
+    if (-not $Auto) { Write-Host "  Restart the agent for the changes to take effect." -ForegroundColor Cyan }
 } else {
     Write-Host "  Update finished with $errors error(s). Check the output above." -ForegroundColor Red
 }
 
 Write-Host ""
-Read-Host "  Press Enter to close"
+if (-not $Auto) { Read-Host "  Press Enter to close" }

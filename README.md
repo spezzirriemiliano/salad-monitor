@@ -164,7 +164,42 @@ Restart the server after editing. You can also toggle notifications on/off from 
 
 ---
 
-## 5. Updating
+## 5. Clore AI Tab (optional)
+
+The dashboard can show a second tab with your Clore AI servers alongside HiveOS GPU temperatures. This tab is hidden by default and only appears when the `clore` section is present in `config.json`.
+
+**5.1 Get your Clore API token:**
+
+1. Log in to [clore.ai](https://clore.ai)
+2. Go to **Account → API** and generate a token
+
+**5.2 Add the `clore` section to `server/config.json`:**
+
+```json
+"clore": {
+  "api_token": "your_clore_api_token_here",
+  "hiveos": {
+    "token": "your_hiveos_api_token",
+    "farm_hash": "your_farm_hash",
+    "farm_id": 12345
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `clore.api_token` | API token from clore.ai — required to show the Clore tab |
+| `clore.hiveos.token` | HiveOS API token — used to fetch GPU temperatures per rig |
+| `clore.hiveos.farm_hash` | Your HiveOS farm hash |
+| `clore.hiveos.farm_id` | Your HiveOS farm ID |
+
+> **Note:** The `hiveos` subsection is optional. Without it, the Clore tab shows server info but no GPU temperature data.
+
+Restart the server after editing. The **Clore AI** tab will appear in the dashboard automatically.
+
+---
+
+## 6. Updating
 
 Each component has a self-update script that checks GitHub for a newer version and downloads all files automatically.
 

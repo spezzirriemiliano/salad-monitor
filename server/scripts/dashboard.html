@@ -95,6 +95,8 @@
       align-items: center;
     }
     header h1 { font-size: 16px; font-weight: 600; letter-spacing: .5px; }
+    #header-version { font-size: 11px; font-weight: 400; opacity: 0.5; margin-left: 6px; vertical-align: middle; }
+    #server-update-badge { display: none; font-size: 9px; font-weight: 500; background: #1b2e28; color: #3fb94a; border: 1px solid #4caf50; border-radius: 10px; padding: 1px 8px; margin-left: 8px; vertical-align: middle; white-space: nowrap; }
     #header-actions {
       display: flex;
       align-items: center;
@@ -482,6 +484,220 @@
       font-size: 15px;
     }
 
+    /* ── Tabs ── */
+    #tabs-bar {
+      display: none;
+      gap: 4px;
+      padding: 12px 20px 0;
+    }
+    .tab-btn {
+      flex: 1;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 20px;
+      cursor: pointer;
+      border-bottom: none;
+      transition: color .15s, background .15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    #tab-salad, #tab-clore {
+      border-top: 1px solid var(--border);
+    }
+    .tab-icon { vertical-align: middle; margin-right: 6px; }
+
+    /* ── Clore sort bar — matches #sort-bar styles ── */
+    #clore-sort-bar {
+      padding: 0 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    #clore-sort-bar select {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s;
+    }
+    #clore-sort-bar select:hover { border-color: #8b949e; }
+
+    /* ── Clore Grid ── */
+    #clore-alerts-wrap { padding: 0 20px; }
+    #clore-gpu-summary { padding: 12px 20px 0; display: flex; gap: 12px; }
+    #clore-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      padding: 16px 20px;
+    }
+    #clore-grid.view-normal   { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    #clore-grid.view-detailed { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+    .clore-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: default;
+    }
+    .clore-card.online  { border-left: 3px solid var(--green); }
+    .clore-card.no-earn { border-left: 3px solid var(--orange); }
+    .clore-card.offline { border-left: 3px solid var(--red); opacity: .55; }
+    .clore-card-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .clore-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .clore-status-dot.online  { background: var(--green); }
+    .clore-status-dot.offline { background: var(--red); }
+    .clore-status-dot.no-earn { background: var(--yellow); }
+    .clore-worker-name {
+      font-weight: 700;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .clore-sys-row {
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .clore-sys-row span { white-space: nowrap; }
+    .clore-gpu-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+    .clore-gpu-name {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .clore-cgs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .clore-cgs-item {
+      cursor: default;
+      white-space: nowrap;
+    }
+    .clore-cgs-key {
+      font-weight: 700;
+      margin-right: 2px;
+      opacity: 0.55;
+      font-size: 10px;
+    }
+    .clore-detail-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .clore-detail-row span { color: var(--muted); }
+    .clore-detail-row b { color: var(--text); font-weight: 600; }
+
+    /* ── Breaker Bar ── */
+    #breaker-bar {
+      padding: 8px 20px 0;
+    }
+    .breaker-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .breaker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .breaker-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+    .breaker-values {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .breaker-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .breaker-stat .b-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+    .breaker-stat .b-value {
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-family: monospace;
+      color: var(--orange);
+    }
+    .breaker-divider {
+      width: 1px;
+      height: 32px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+    .breaker-refresh-btn {
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .breaker-refresh-btn:hover { color: var(--text); border-color: var(--text); }
+
     /* ── Earnings Summary ── */
     #earnings-summary {
       padding: 12px 20px 0;
@@ -547,6 +763,10 @@
     @media (max-width: 600px) {
       .earnings-bar { flex-direction: column; gap: 10px; }
       .earnings-bar > .earnings-divider.strong { display: none; }
+      .earnings-bar.nowrap { flex-direction: row; gap: 16px; overflow-x: auto; }
+    }
+    @media (max-width: 580px) {
+      .clore-wallet-group .earnings-divider { display: none; }
     }
     .balance-stat {
       display: flex;
@@ -673,19 +893,34 @@
       text-decoration: none;
     }
     .stats-btn:hover { background: #30363d; color: var(--blue); border-color: rgba(88,166,255,.4); }
-    .compact-detail-btn {
-      display: none;
-      align-items: center; justify-content: center;
-      background: #21262d; border: 1px solid var(--border);
-      color: var(--muted); border-radius: 5px;
-      font-size: 10px; font-weight: 700;
-      padding: 1px 5px; text-decoration: none;
-      transition: background .15s, color .15s, border-color .15s;
-      line-height: 1.6;
-    }
-    .compact-detail-btn:hover { background: #30363d; color: var(--blue); border-color: rgba(88,166,255,.4); }
-    #grid.view-compact .compact-detail-btn { display: flex; }
+    .compact-detail-btn { display: none; }
     #grid.view-compact .stats-btn { display: none; }
+
+    .kebab-wrap { position: relative; }
+    .kebab-btn {
+      background: transparent; border: none;
+      color: var(--muted); cursor: pointer;
+      font-size: 16px; line-height: 1; padding: 2px 6px;
+      border-radius: 5px; transition: background .15s, color .15s;
+    }
+    .kebab-btn:hover { background: #30363d; color: var(--text); }
+    .kebab-menu {
+      display: none; position: absolute; right: 0; top: calc(100% + 4px);
+      background: #1c2128; border: 1px solid #30363d;
+      border-radius: 8px; min-width: 160px; z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4); overflow: hidden;
+    }
+    .kebab-menu.open { display: block; }
+    .kebab-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 14px; font-size: 13px; cursor: pointer;
+      color: var(--text); text-decoration: none;
+      transition: background .12s;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .kebab-item:hover { background: #30363d; }
+    .kebab-item.danger { color: var(--red); }
+    .kebab-item.danger:hover { background: rgba(248,81,73,.12); }
 
     .earnings-details-btn {
       position: absolute;
@@ -716,15 +951,44 @@
       color: var(--green);
       border: 1px solid rgba(63,185,80,.3);
       font-family: monospace;
+      width: fit-content;
     }
+    .server-new-badge { font-size: 9px; font-weight: 500; border-radius: 10px; padding: 1px 8px; vertical-align: middle; white-space: nowrap; }
+    .agent-update-btn { font-size: 10px; font-weight: 600; background: #21262d; color: #cdd9e5; border: 1px solid #444c56; border-radius: 4px; padding: 2px 8px; cursor: pointer; white-space: nowrap; font-family: monospace; transition: background .15s, border-color .15s; }
+    .agent-update-btn:hover { background: #2d333b; border-color: #768390; }
     .version-badge.outdated {
       color: var(--orange);
       border-color: rgba(227,116,43,.4);
       background: rgba(227,116,43,.1);
     }
+    .reboot-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .reboot-btn:hover { background: rgba(248,81,73,.12); color: var(--red); border-color: rgba(248,81,73,.4); }
+    .reboot-btn.loading { opacity: .5; pointer-events: none; }
   </style>
 </head>
 <body>
+
+<!-- Reboot confirmation modal -->
+<div id="reboot-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);align-items:center;justify-content:center">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:28px 32px;max-width:340px;width:90%;box-shadow:0 16px 48px rgba(0,0,0,.5)">
+    <div id="reboot-modal-icon" style="font-size:22px;margin-bottom:8px">⟳</div>
+    <div id="reboot-modal-title" style="font-weight:700;font-size:15px;margin-bottom:6px">Restart machine?</div>
+    <div id="reboot-modal-name" style="color:var(--muted);font-size:13px;margin-bottom:20px;font-family:monospace"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('reboot-modal').style.display='none'" style="background:#21262d;border:1px solid #30363d;color:var(--text);padding:7px 18px;border-radius:7px;cursor:pointer;font-size:13px">Cancel</button>
+      <button id="reboot-modal-confirm" style="background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.4);color:#f85149;padding:7px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">Restart</button>
+    </div>
+  </div>
+</div>
 
 <!-- Auth overlay (setup + login) -->
 <div id="auth-overlay">
@@ -749,7 +1013,7 @@
 
 <header>
   <div id="header-top">
-    <h1>⚡ Salad Monitor</h1>
+    <h1><img id="header-icon" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;image-rendering:auto"><span id="header-title-text">Salad Monitor</span><span id="header-version"></span><span id="server-update-badge"></span></h1>
     <div id="header-actions">
       <button id="refresh-btn" onclick="fetchData()">↻ Refresh</button>
       <div id="gear-menu">
@@ -788,44 +1052,178 @@
   <span class="banner-icon">⚠️</span>
   <span class="banner-text" id="cookie-banner-text"></span>
 </div>
-<div id="earnings-summary"></div>
-<div id="gpu-summary"></div>
-<div id="alerts-wrap"></div>
-<div id="sort-bar">
-  <div class="bar-group">
-    <label>Sort by</label>
-    <select id="sort-field" onchange="applySortAndRender()">
-      <option value="name">PC Name</option>
-      <option value="earning">Earnings</option>
-      <option value="gpu_temp">GPU Temp</option>
-      <option value="gpu_mem_temp">GPU Mem Temp</option>
-      <option value="gpu_power">GPU Power</option>
-    </select>
-  </div>
-  <div class="bar-group">
-    <label>Direction</label>
-    <select id="sort-dir" onchange="applySortAndRender()">
-      <option value="asc">ASC</option>
-      <option value="desc">DESC</option>
-    </select>
-  </div>
-  <div class="bar-group" style="margin-left:auto">
-    <label>View</label>
-    <select id="view-select" onchange="setView(parseInt(this.value))">
-      <option value="0">Compact</option>
-      <option value="1">Normal</option>
-      <option value="2">Detailed</option>
-      <option value="3">Detailed + Network</option>
-    </select>
-  </div>
+<div id="breaker-bar"></div>
+<div id="tabs-bar">
+  <button class="tab-btn active" id="tab-btn-salad" onclick="switchTab('salad')">
+    <img class="tab-icon" src="data:image/x-icon;base64,AAABAAMAMDAAAAEAIACoJQAANgAAACAgAAABACAAqBAAAN4lAAAQEAAAAQAgAGgEAACGNgAAKAAAADAAAABgAAAAAQAgAAAAAAAAJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/q2AO/6tpSv+rayL/q2vy/6tr/v+ra/7/q2v+/6tr/v+ra47/q2iIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC+6toNv+raj7/q2la/6toJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/r2QS/6tpjv+ra27/q2v+/6tr/v+ra/7/q2v+/6tr/v+ra47/q2iIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC+69sCv+raCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAv+raI7/q2oy/6trpv+ra/7/q2v+/6tr/v+ra47/q2iIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL/q2gO/6to6v+raq7/q2vW/6tr/v+ra47/q2iIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAv+raCr/q2lW/6trIv+ra4L/q2iIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC/6toXv+raX7/q2hcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///////wAA////////AAD///////8AAP///////wAA////////AAD///////8AAP///D///wAA///wD///AAD//8AD//8AAP//gAH//wAA//4AAH//AAD/+AAAH/8AAP/gAAAH/wAA/8AAAAP/AAD/AAAAAP8AAP+AAMAA/wAA/+AA4AD/AAD/+AD4AP8AAP/8AP4A/wAA//4A/wD/AAD//MD8wP8AAP/w8PDw/wAA/8D44Pz/AAD/gP6A/v8AAP+A/wD//wAA/8D/AP//AAD/8P8A//8AAP/8/wD//wAA////AP//AAD///8BP/8AAP///wcf/wAA////Hwf/AAD///8/Af8AAP////8A/wAA///8/wP/AAD///D/B/8AAP//4P8f/wAA//+A/3//AAD//4D///8AAP//wP///wAA///w////AAD///z///8AAP///////wAA////////AAD///////8AAP///////wAA////////AAD///////8AACgAAAAgAAAAQAAAAAEAIAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;image-rendering:auto"> Salad AI
+  </button>
+  <button class="tab-btn" id="tab-btn-clore" onclick="switchTab('clore')">
+    <img class="tab-icon" src="data:image/png;base64,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" style="width:18px;height:18px;vertical-align:middle;margin-right:6px"> Clore AI
+  </button>
 </div>
-<div id="grid"><div id="loading">Loading data...</div></div>
+
+<div id="tab-salad">
+  <div id="earnings-summary"></div>
+  <div id="gpu-summary"></div>
+  <div id="alerts-wrap"></div>
+  <div id="sort-bar">
+    <div class="bar-group">
+      <label>Sort by</label>
+      <select id="sort-field" onchange="applySortAndRender()">
+        <option value="name">PC Name</option>
+        <option value="earning">Earnings</option>
+        <option value="gpu_temp">GPU Temp</option>
+        <option value="gpu_mem_temp">GPU Mem Temp</option>
+        <option value="gpu_power">GPU Power</option>
+      </select>
+    </div>
+    <div class="bar-group">
+      <label>Direction</label>
+      <select id="sort-dir" onchange="applySortAndRender()">
+        <option value="asc">ASC</option>
+        <option value="desc">DESC</option>
+      </select>
+    </div>
+    <div class="bar-group" style="margin-left:auto">
+      <label>View</label>
+      <select id="view-select" onchange="setView(parseInt(this.value))">
+        <option value="0">Compact</option>
+        <option value="1">Normal</option>
+        <option value="2">Detailed</option>
+        <option value="3">Detailed + Network</option>
+      </select>
+    </div>
+  </div>
+  <div id="grid"><div id="loading">Loading data...</div></div>
+</div>
+
+<div id="tab-clore" style="display:none">
+  <div id="clore-balance-bar" style="padding:12px 20px 0"></div>
+  <div id="clore-gpu-summary"></div>
+  <div id="clore-alerts-wrap"></div>
+  <div id="clore-sort-bar">
+    <div class="bar-group">
+      <label>Sort by</label>
+      <select id="clore-sort-field" onchange="renderCloreGrid()">
+        <option value="name">Name</option>
+        <option value="gpu_temp">GPU Temp</option>
+        <option value="mem_temp">Mem Temp</option>
+        <option value="gpu_power">Power</option>
+      </select>
+    </div>
+    <div class="bar-group">
+      <label>Direction</label>
+      <select id="clore-sort-dir" onchange="renderCloreGrid()">
+        <option value="asc">ASC</option>
+        <option value="desc">DESC</option>
+      </select>
+    </div>
+    <div class="bar-group" style="margin-left:auto">
+      <label>View</label>
+      <select id="clore-view-select" onchange="renderCloreGrid()">
+        <option value="compact">Compact</option>
+        <option value="normal">Normal</option>
+        <option value="detailed">Detailed</option>
+      </select>
+    </div>
+  </div>
+  <div id="clore-grid"><div style="padding:40px;color:var(--muted)">Loading HiveOS data...</div></div>
+</div>
 
 <script>
   let countdown    = 30;
   let timer;
   let autoReload   = localStorage.getItem('autoReload') !== 'false';
   let lastMachines = [];
+
+  function _showCommandModal(title, subtitle, endpoint, btn, resetLabel, confirmLabel = 'Restart', icon = '⟳', countdown = 0) {
+    const modal = document.getElementById('reboot-modal');
+    const iconEl = document.getElementById('reboot-modal-icon');
+    iconEl.textContent = icon;
+    iconEl.style.display = icon ? '' : 'none';
+    document.getElementById('reboot-modal-title').textContent = title;
+    document.getElementById('reboot-modal-name').textContent = subtitle;
+    modal.style.display = 'flex';
+
+    const confirmBtn = document.getElementById('reboot-modal-confirm');
+    const newConfirm = confirmBtn.cloneNode(true);
+    newConfirm.textContent = confirmLabel;
+    confirmBtn.replaceWith(newConfirm);
+
+    newConfirm.onclick = async () => {
+      modal.style.display = 'none';
+      btn.classList.add('loading');
+      btn.textContent = '…';
+      try {
+        const r = await fetch(endpoint, { method: 'POST' });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok) {
+          if (countdown > 0) {
+            let secs = countdown;
+            btn.disabled = true;
+            btn.style.color = 'var(--green)';
+            const tick = () => {
+              btn.textContent = `↻ refreshing in ${secs}s`;
+              if (secs <= 0) { fetchData(); btn.textContent = resetLabel; btn.style.color = ''; btn.disabled = false; return; }
+              secs--;
+              setTimeout(tick, 1000);
+            };
+            tick();
+          } else {
+            btn.textContent = '✓ sent';
+            btn.style.color = 'var(--green)';
+            setTimeout(() => { btn.textContent = resetLabel; btn.style.color = ''; }, 4000);
+          }
+        } else {
+          btn.textContent = '✗ error';
+          btn.style.color = 'var(--red)';
+          alert(`Failed: ${j.error || r.status}`);
+          setTimeout(() => { btn.textContent = resetLabel; btn.style.color = ''; }, 4000);
+        }
+      } catch (e) {
+        btn.textContent = '✗';
+        btn.style.color = 'var(--red)';
+        alert(`Failed: ${e.message}`);
+        setTimeout(() => { btn.textContent = resetLabel; btn.style.color = ''; }, 4000);
+      } finally {
+        btn.classList.remove('loading');
+      }
+    };
+  }
+
+  function toggleKebab(evt, btn) {
+    evt.stopPropagation();
+    const menu = btn.nextElementSibling;
+    const isOpen = menu.classList.contains('open');
+    document.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
+    if (!isOpen) menu.classList.add('open');
+  }
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
+  });
+
+  function rebootMachine(evt, machineId) {
+    _showCommandModal(
+      `Reboot ${machineId}?`, '',
+      `/api/machines/${encodeURIComponent(machineId)}/reboot`,
+      evt.currentTarget, '⟳ Reboot PC', 'Reboot', '');
+  }
+
+  function restartSalad(evt, machineId) {
+    _showCommandModal(
+      `Restart Salad on ${machineId}?`, '',
+      `/api/machines/${encodeURIComponent(machineId)}/restart-salad`,
+      evt.currentTarget, '↺ Restart Salad', 'Restart', '');
+  }
+
+  function updateAgent(evt, machineId) {
+    const ver = latestAgentVersion || '';
+    _showCommandModal(
+      `Update ${machineId} Agent${ver ? ` to ${ver}` : ''}?`,
+      '',
+      `/api/machines/${encodeURIComponent(machineId)}/update-agent`,
+      evt.currentTarget, '⬆ Update to ' + ver, 'Update', '', 20);
+  }
 
   function toggleAutoReload() {
     autoReload = !autoReload;
@@ -928,8 +1326,9 @@
       document.getElementById('refresh-btn').innerHTML = '↻ Refresh';
     }
   }
-  let viewLevel      = parseInt(localStorage.getItem('viewLevel') ?? '1');
-  let balanceVisible = localStorage.getItem('balanceVisible') === 'true';
+  let viewLevel           = parseInt(localStorage.getItem('viewLevel') ?? '1');
+  let balanceVisible      = localStorage.getItem('balanceVisible') === 'true';
+  let cloreBalanceVisible = localStorage.getItem('cloreBalanceVisible') === 'true';
   const eyeOpenSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
   const eyeOffSvg  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
 
@@ -944,6 +1343,23 @@
     els.forEach(el => { el.textContent = balanceVisible ? el.dataset.val : '••••••'; });
     const btn = document.getElementById('balance-eye-btn');
     if (btn) btn.innerHTML = balanceVisible ? eyeOpenSvg : eyeOffSvg;
+  }
+
+  function toggleCloreBalance() {
+    cloreBalanceVisible = !cloreBalanceVisible;
+    localStorage.setItem('cloreBalanceVisible', cloreBalanceVisible);
+    renderCloreBalanceVisibility();
+  }
+
+  function renderCloreBalanceVisibility() {
+    document.querySelectorAll('.clore-balance-val').forEach(el => {
+      el.textContent = cloreBalanceVisible ? el.dataset.val : '••••••';
+    });
+    document.querySelectorAll('.clore-usd-val').forEach(el => {
+      el.style.display = cloreBalanceVisible ? 'block' : 'none';
+    });
+    const btn = document.getElementById('clore-balance-eye-btn');
+    if (btn) btn.innerHTML = cloreBalanceVisible ? eyeOpenSvg : eyeOffSvg;
   }
 
   function applyView() {
@@ -1170,6 +1586,413 @@
     return html;
   }
 
+  let activeTab = 'salad';
+  const _tabBadges = { salad: null, clore: null };
+
+  function _applyHeaderBadges(state) {
+    if (!state) return;
+    const ab = document.getElementById('active-badge');
+    ab.textContent = state.activeText;
+    ab.className   = 'badge ' + state.activeColor;
+    const eb = document.getElementById('earning-badge');
+    eb.textContent = state.earnText;
+    eb.className   = 'badge ' + state.earnColor;
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    localStorage.setItem('activeTab', tab);
+    document.getElementById('tab-salad').style.display = tab === 'salad' ? '' : 'none';
+    document.getElementById('tab-clore').style.display = tab === 'clore'  ? '' : 'none';
+    document.getElementById('tab-btn-salad').classList.toggle('active', tab === 'salad');
+    document.getElementById('tab-btn-clore').classList.toggle('active', tab === 'clore');
+    const iconSrc = document.getElementById(tab === 'salad' ? 'tab-btn-salad' : 'tab-btn-clore').querySelector('img').src;
+    document.getElementById('header-icon').src = iconSrc;
+    const title = tab === 'salad' ? 'Salad Monitor' : 'Clore Monitor';
+    document.getElementById('header-title-text').textContent = title;
+    document.title = title;
+    _applyHeaderBadges(_tabBadges[tab]);
+  }
+  switchTab(localStorage.getItem('activeTab') || 'salad');
+
+  // Restore Clore combo selections
+  (() => {
+    const f = localStorage.getItem('cloreSortField');
+    const d = localStorage.getItem('cloreSortDir');
+    const v = localStorage.getItem('cloreView');
+    if (f) { const el = document.getElementById('clore-sort-field');  if (el) el.value = f; }
+    if (d) { const el = document.getElementById('clore-sort-dir');    if (el) el.value = d; }
+    if (v) { const el = document.getElementById('clore-view-select'); if (el) el.value = v; }
+  })();
+
+  function tempColor(t) {
+    if (t == null) return 'var(--muted)';
+    if (t >= 90) return 'var(--red)';
+    if (t >= 80) return 'var(--orange)';
+    if (t >= 70) return 'var(--yellow)';
+    return 'var(--green)';
+  }
+
+  let _cloreWorkers = [];
+
+  function renderCloreAlerts(machines) {
+    const wrap = document.getElementById('clore-alerts-wrap');
+    const alerts = [];
+    const offline = machines.filter(s => !s.online).map(s => s.name || `#${s.id}`);
+    if (offline.length) alerts.push({ label: '🔴 Offline', ids: offline, color: 'a-red' });
+    const hot = machines.filter(s => (s.hive?.gpus || []).some(g => g.temperature_c >= 80)).map(s => s.name || `#${s.id}`);
+    if (hot.length) alerts.push({ label: '🔥 GPU Temp', ids: hot, color: 'a-red' });
+    const memHot = machines.filter(s => (s.hive?.gpus || []).some(g => g.mem_temp_c >= 90)).map(s => s.name || `#${s.id}`);
+    if (memHot.length) alerts.push({ label: '🔥 Mem Temp', ids: memHot, color: 'a-orange' });
+    const noEarn = machines.filter(s => s.online && !s.rented).map(s => s.name || `#${s.id}`);
+    if (noEarn.length) alerts.push({ label: '💸 No Earning', ids: noEarn, color: 'a-yellow' });
+    const broken = machines.filter(s => s.working_properly === false).map(s => s.name || `#${s.id}`);
+    if (broken.length) alerts.push({ label: '⚠️ Not Working', ids: broken, color: 'a-orange' });
+    if (!alerts.length) { wrap.innerHTML = ''; return; }
+    let html = '<div id="alerts" style="margin:8px 0 0">';
+    html += '<div id="alerts-header"><span class="dot"></span>Active alerts</div>';
+    for (const a of alerts)
+      html += `<div class="alert-row"><span class="alert-label ${a.color}">${a.label}</span><div class="alert-pills">${a.ids.map(id => `<span class="alert-pill ${a.color}">${id}</span>`).join('')}</div></div>`;
+    html += '</div>';
+    wrap.innerHTML = html;
+  }
+
+  function renderCloreGpuSummary(machines) {
+    const wrap = document.getElementById('clore-gpu-summary');
+    const counts = {};
+    let totalWatts = 0;
+    for (const s of machines) {
+      for (const gpuName of (s.gpu_array || [])) {
+        const match = gpuName?.match(/\b([2-5]\d{3})(?:\s*(Ti|Super))?/i);
+        if (match) {
+          const suffix = match[2] ? ` ${match[2].charAt(0).toUpperCase()}${match[2].slice(1).toLowerCase()}` : '';
+          counts[match[1] + suffix] = (counts[match[1] + suffix] ?? 0) + 1;
+        }
+      }
+      if (s.hive?.total_power_w) totalWatts += s.hive.total_power_w;
+    }
+    const entries = Object.entries(counts).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+    if (!entries.length) { wrap.innerHTML = ''; return; }
+    const pills = entries.map(([m, c]) => `<span class="gpu-pill">RTX ${m} × ${c}</span>`).join('');
+    const powerBox = totalWatts > 0 ? `<div class="gpu-box"><div class="gpu-box-header">Power</div><span class="gpu-power-value">${Math.round(totalWatts)}W</span></div>` : '';
+    wrap.innerHTML = `${powerBox}<div class="gpu-box" style="flex:1"><div class="gpu-box-header">GPUs</div><div>${pills}</div></div>`;
+  }
+
+  function renderCloreBalance(totalEarning, wallets, prices, walletsFetchedAt, walletsError) {
+    const wrap = document.getElementById('clore-balance-bar');
+    if (!wrap) return;
+
+    const priceMap = {};
+    if (prices) {
+      priceMap['bitcoin']          = prices['bitcoin'];
+      priceMap['CLORE-Blockchain'] = prices['clore-ai'];
+    }
+
+    const mask = !cloreBalanceVisible;
+    const dim  = `style="color:var(--muted)"`;
+
+    const walletList = wallets?.wallets?.length
+      ? wallets.wallets.map(w => {
+          const usdPrice = priceMap[w.name];
+          const usdVal   = usdPrice != null ? w.balance * usdPrice : null;
+          const label    = w.name === 'bitcoin' ? 'BTC' : w.name === 'CLORE-Blockchain' ? 'CLORE' : w.name;
+          const balFmt   = w.name === 'bitcoin'
+            ? w.balance.toFixed(6)
+            : w.balance.toFixed(2);
+          const usdLabel = usdVal != null ? `≈USD ${usdVal.toFixed(2)}` : '';
+          const shownBal = mask ? '••••••' : balFmt;
+          return `<div class="earnings-stat">
+            <span class="e-label">${label}</span>
+            <span class="e-value clore-balance-val" data-val="${balFmt}" data-usd="${usdLabel}">${shownBal}</span>
+            <span class="clore-usd-val" style="color:var(--muted);font-size:13px;font-weight:bold;display:${mask || !usdLabel ? 'none' : 'block'}">${usdLabel}</span>
+          </div>`;
+        })
+      : [
+          `<div class="earnings-stat"><span class="e-label">BTC</span><span class="e-value" ${dim}>---</span></div>`,
+          `<div class="earnings-stat"><span class="e-label">CLORE</span><span class="e-value" ${dim}>---</span></div>`,
+        ];
+
+    const earnFmt  = totalEarning != null ? `$${totalEarning.toFixed(3)}/hr` : '---';
+    const est24Fmt = totalEarning != null ? `$${(totalEarning * 24).toFixed(2)}` : '---';
+
+    const earningSection = `
+      <div class="earnings-stat">
+        <span class="e-label">Earning now</span>
+        <span class="e-value" style="color:${totalEarning != null ? 'var(--green)' : 'var(--muted)'}">${earnFmt}</span>
+      </div>
+      <span style="color:var(--muted);font-size:16px;align-self:center">→</span>
+      <div class="earnings-stat">
+        <span class="e-label">Est. 24h</span>
+        <span class="e-value" style="color:${totalEarning != null ? 'var(--purple)' : 'var(--muted)'}">${est24Fmt}</span>
+      </div>`;
+
+    const walletSection = walletList.join('<div class="earnings-divider"></div>');
+
+    let walletStatusHtml = '';
+    if (walletsError != null) {
+      walletStatusHtml = `<span style="font-size:10px;color:var(--orange)">⚠ balance error: ${walletsError}</span>`;
+    } else if (walletsFetchedAt) {
+      const ago = Math.round((Date.now() - new Date(walletsFetchedAt).getTime()) / 60000);
+      walletStatusHtml = `<span style="font-size:10px;color:var(--muted)">balance updated ${ago}m ago</span>`;
+    }
+
+    wrap.innerHTML = `<div class="earnings-bar nowrap">
+      ${earningSection}
+      <div class="earnings-divider"></div>
+      <div class="clore-wallet-group" style="display:flex;align-items:flex-start;gap:24px;flex-wrap:nowrap">
+        ${walletSection}
+        <button class="eye-btn" id="clore-balance-eye-btn" onclick="toggleCloreBalance()" title="Show/hide balance" style="align-self:center">${cloreBalanceVisible ? eyeOpenSvg : eyeOffSvg}</button>
+      </div>
+      ${walletStatusHtml ? `<span style="margin-left:auto;align-self:center">${walletStatusHtml}</span>` : ''}
+    </div>`;
+  }
+
+  function renderCloreServerCard(s, view) {
+    const statusIcon = !s.online ? '🔴' : !s.rented ? '🟠' : '🟢';
+    const warnIcon = s.working_properly === false ? `<span title="Not working properly" style="font-size:13px;margin-right:2px">⚠️</span>` : '';
+
+    const reliabilityBadge = s.reliability != null
+      ? `<span class="earning-badge dim">${Math.round(s.reliability * 100)}%</span>`
+      : '';
+    const remainingBadge = s.rented && s.remaining_h != null
+      ? `<span class="earning-badge dim">${(s.remaining_h / 24).toFixed(1)}d</span>`
+      : '';
+    const earningBadge = s.rented && s.price_usd != null
+      ? `<span class="earning-badge">$${s.price_usd.toFixed(2)}/hr</span>`
+      : `<span class="earning-badge dim">${s.online ? 'idle' : 'offline'}</span>`;
+
+    // GPU blocks: name from Clore gpu_array, temps from HiveOS
+    const hiveGpus = s.hive?.gpus || [];
+    const isNormal = view === 'normal' || view === 'detailed';
+
+    const gpuBlocks = (s.gpu_array || []).map((gpuName, i) => {
+      const hg = hiveGpus[i] || {};
+
+      if (isNormal) {
+        // Normal view: bar rows like Salad
+        const tc = tempClass(hg.temperature_c);
+        const mc = tempClass(hg.mem_temp_c);
+        const tempBarColor = tc === 'crit' ? 'red' : tc === 'hot' ? 'orange' : tc === 'warm' ? 'yellow' : 'green';
+        const memBarColor  = mc === 'crit' ? 'red' : mc === 'hot' ? 'orange' : mc === 'warm' ? 'yellow' : 'green';
+
+        let rows = `<div class="section-label" style="margin-top:6px">GPU · ${gpuName}</div>`;
+        if (hg.temperature_c != null) rows += `
+          <div class="row">
+            <span class="label" style="min-width:58px">GPU Temp</span>
+            <div class="bar-wrap"><div class="bar-fill ${tempBarColor}" style="width:${Math.min(100, hg.temperature_c / 110 * 100)}%"></div></div>
+            <span class="val ${tc}">${hg.temperature_c}°C</span>
+          </div>`;
+        if (hg.mem_temp_c != null) rows += `
+          <div class="row">
+            <span class="label" style="min-width:58px">Mem Temp</span>
+            <div class="bar-wrap"><div class="bar-fill ${memBarColor}" style="width:${Math.min(100, hg.mem_temp_c / 110 * 100)}%"></div></div>
+            <span class="val ${mc}">${hg.mem_temp_c}°C</span>
+          </div>`;
+        if (hg.fan_pct != null) rows += `
+          <div class="row">
+            <span class="label">Fan</span>
+            <div class="bar-wrap"><div class="bar-fill neutral" style="width:${Math.min(100, hg.fan_pct)}%"></div></div>
+            <span class="val">${hg.fan_pct}%</span>
+          </div>`;
+        if (hg.power_w != null) rows += `
+          <div class="row">
+            <span class="label">Power</span>
+            <div class="bar-wrap"><div class="bar-fill neutral" style="width:${Math.min(100, hg.power_w / 400 * 100)}%"></div></div>
+            <span class="val">${hg.power_w}W</span>
+          </div>`;
+        return `<div class="clore-gpu-block">${rows}</div>`;
+      }
+
+      // Compact view: inline cgs spans
+      const items = [
+        hg.temperature_c != null ? `<span class="clore-cgs-item" style="color:${tempColor(hg.temperature_c)}" title="GPU Temp"><span class="clore-cgs-key">T</span>${hg.temperature_c}°</span>` : '',
+        hg.mem_temp_c    != null ? `<span class="clore-cgs-item" style="color:${tempColor(hg.mem_temp_c)}" title="Mem Temp"><span class="clore-cgs-key">M</span>${hg.mem_temp_c}°</span>` : '',
+        hg.fan_pct       != null ? `<span class="clore-cgs-item" style="color:var(--muted)" title="Fan"><span class="clore-cgs-key">F</span>${hg.fan_pct}%</span>` : '',
+        hg.power_w       != null ? `<span class="clore-cgs-item" title="Power"><span class="clore-cgs-key">P</span>${hg.power_w}W</span>` : '',
+      ].filter(Boolean).join('');
+      return `<div class="clore-gpu-block">
+        <span class="clore-gpu-name">${gpuName}</span>
+        ${items ? `<div class="clore-cgs">${items}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    const totalPower = s.hive?.total_power_w;
+    const sysRow = view === 'compact' ? '' : [
+      totalPower           != null ? `<span>${totalPower}W total</span>` : '',
+      s.hive?.uptime_hours != null ? `<span>Up ${s.hive.uptime_hours}h</span>` : '',
+    ].filter(Boolean).join('');
+
+    const cpuRamRows = isNormal ? [
+      s.cpu    ? `<div class="hostname normal-only">${s.cpu}</div>` : '',
+      s.ram_gb != null ? `<div class="hostname normal-only">${Math.round(s.ram_gb)}GB RAM</div>` : '',
+    ].join('') : '';
+
+    const netSection = view === 'detailed' && (s.net_down != null || s.net_up != null) ? (() => {
+      const maxMbps = 10000;
+      let html = `<hr class="divider"><div class="section-label">Network</div>`;
+      if (s.net_down != null) html += `
+        <div class="row">
+          <span class="label">Download</span>
+          <div class="bar-wrap"><div class="bar-fill neutral" style="width:${Math.min(100, s.net_down / maxMbps * 100)}%"></div></div>
+          <span class="val" style="color:#9bc9ff">${s.net_down} Mbps <span class="arr-dn">⬇</span></span>
+        </div>`;
+      if (s.net_up != null) html += `
+        <div class="row">
+          <span class="label">Upload</span>
+          <div class="bar-wrap"><div class="bar-fill neutral" style="width:${Math.min(100, s.net_up / maxMbps * 100)}%"></div></div>
+          <span class="val" style="color:#80bf89">${s.net_up} Mbps <span class="arr-up">⬆</span></span>
+        </div>`;
+      return html;
+    })() : '';
+
+    const cardClass = !s.online ? 'offline' : !s.rented ? 'no-earn' : 'online';
+    return `<div class="clore-card ${cardClass}">
+      <div class="clore-card-header"><span style="font-size:14px">${statusIcon}</span>${warnIcon}<span style="margin-left:auto;display:flex;gap:4px">${reliabilityBadge}${remainingBadge}${earningBadge}</span></div>
+      <span class="machine-id">${s.name || `Server ${s.id}`}</span>
+      ${cpuRamRows}
+      ${sysRow ? `<div class="clore-sys-row">${sysRow}</div>` : ''}
+      ${gpuBlocks}
+      ${netSection}
+    </div>`;
+  }
+
+  let _cloreServers = [];
+  let _cloreTotalEarning = null;
+  let _cloreWallets = null;
+  let _cloreWalletsFetchedAt = null;
+  let _cloreWalletsError = null;
+  let _cryptoPrices = null;
+
+  function _rigNum(name) {
+    const m = (name || '').replace(/^rig\s*/i, '').trim().match(/^(\d+)/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
+  function renderCloreGrid(hiveos, clore, prices) {
+    if (hiveos  !== undefined) _cloreWorkers  = hiveos?.workers || [];
+    if (prices  !== undefined) _cryptoPrices  = prices;
+    if (clore   !== undefined) {
+      _cloreServers        = clore?.servers         || [];
+      _cloreTotalEarning   = clore?.total_earning   ?? null;
+      _cloreWallets        = clore?.wallets         ?? null;
+      _cloreWalletsFetchedAt = clore?.wallets_fetched_at ?? null;
+      _cloreWalletsError   = clore?.wallets_error   ?? null;
+    }
+
+    const wrap  = document.getElementById('clore-grid');
+    const view  = document.getElementById('clore-view-select')?.value || 'compact';
+    const field = document.getElementById('clore-sort-field')?.value  || 'name';
+    const dir   = document.getElementById('clore-sort-dir')?.value    || 'asc';
+    localStorage.setItem('cloreSortField', field);
+    localStorage.setItem('cloreSortDir',   dir);
+    localStorage.setItem('cloreView',      view);
+
+    if (!_cloreServers.length) {
+      wrap.innerHTML = '<div style="padding:40px;color:var(--muted)">No Clore servers found.</div>';
+      return;
+    }
+
+    // index HiveOS workers by rig number for temp data merge
+    const hiveByRig = {};
+    for (const w of _cloreWorkers) {
+      const n = _rigNum(w.name);
+      if (n != null) hiveByRig[n] = w;
+    }
+
+    // merge clore server + hiveos temps
+    const machines = _cloreServers.map(s => ({
+      ...s,
+      hive: hiveByRig[_rigNum(s.name)] || null,
+    }));
+
+    renderCloreBalance(_cloreTotalEarning, _cloreWallets, _cryptoPrices, _cloreWalletsFetchedAt, _cloreWalletsError);
+    renderCloreAlerts(machines);
+    renderCloreGpuSummary(machines);
+
+    const clTotal  = machines.length;
+    const clOnline = machines.filter(s => s.online).length;
+    const clEarn   = machines.filter(s => s.rented).length;
+    _tabBadges.clore = {
+      activeText:  `Active: ${clOnline}/${clTotal}`,
+      activeColor: clOnline === clTotal ? 'green' : clOnline === 0 ? 'red' : 'yellow',
+      earnText:    `Earning: ${clEarn}/${clTotal}`,
+      earnColor:   clEarn === clTotal ? 'green' : clEarn === 0 ? 'red' : 'yellow',
+    };
+    if (activeTab === 'clore') _applyHeaderBadges(_tabBadges.clore);
+
+    const sorted = [...machines].sort((a, b) => {
+      if (field === 'name') { const av = a.name||'', bv = b.name||''; return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av); }
+      let av, bv;
+      if (field === 'gpu_temp')  { av = a.hive?.gpus?.[0]?.temperature_c ?? -1; bv = b.hive?.gpus?.[0]?.temperature_c ?? -1; }
+      if (field === 'mem_temp')  { av = a.hive?.gpus?.[0]?.mem_temp_c    ?? -1; bv = b.hive?.gpus?.[0]?.mem_temp_c    ?? -1; }
+      if (field === 'gpu_power') { av = a.hive?.total_power_w ?? -1; bv = b.hive?.total_power_w ?? -1; }
+      return dir === 'asc' ? av - bv : bv - av;
+    });
+
+    wrap.className = '';
+    wrap.id = 'clore-grid';
+    if (view === 'normal')   wrap.classList.add('view-normal');
+    if (view === 'detailed') wrap.classList.add('view-detailed');
+    wrap.innerHTML = sorted.map(s => renderCloreServerCard(s, view)).join('');
+  }
+
+  function renderBreakerBar(data) {
+    const wrap = document.getElementById('breaker-bar');
+    if (!data.smart_home_configured) {
+      wrap.innerHTML = '';
+      wrap.style.display = 'none';
+      return;
+    }
+    const sh = data.smart_home;
+    if (!sh || (sh.power_w == null && sh.voltage_v == null && sh.current_a == null)) {
+      wrap.innerHTML = '';
+      return;
+    }
+    _updateBreakerCard(sh);
+  }
+
+  function _updateBreakerCard(sh) {
+    const wrap = document.getElementById('breaker-bar');
+    const fmt = (v, dec, unit) => v != null ? `${v.toFixed(dec)}${unit}` : '—';
+    wrap.innerHTML = `
+      <div class="breaker-card">
+        <div class="breaker-header">
+          <span class="breaker-title">Breaker</span>
+          <button class="breaker-refresh-btn" id="breaker-refresh-btn" onclick="refreshBreaker()" title="Refresh breaker">↻</button>
+        </div>
+        <div class="breaker-values">
+          <div class="breaker-stat">
+            <span class="b-label">Power</span>
+            <span class="b-value">${fmt(sh.power_w, 0, ' W')}</span>
+          </div>
+          <div class="breaker-divider"></div>
+          <div class="breaker-stat">
+            <span class="b-label">Voltage</span>
+            <span class="b-value">${fmt(sh.voltage_v, 1, ' V')}</span>
+          </div>
+          <div class="breaker-divider"></div>
+          <div class="breaker-stat">
+            <span class="b-label">Current</span>
+            <span class="b-value">${fmt(sh.current_a, 2, ' A')}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function refreshBreaker() {
+    const btn = document.getElementById('breaker-refresh-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+    try {
+      const res = await fetch('/api/smart-home/test');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.ok && json.data) _updateBreakerCard(json.data);
+    } catch(e) { }
+    finally {
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    }
+  }
+
   function renderEarningsSummary(data) {
     const wrap = document.getElementById('earnings-summary');
     if (data.earnings_24h == null && data.earnings_30d == null) { wrap.innerHTML = ''; return; }
@@ -1323,6 +2146,7 @@ const gpuHot = machines.filter(m => {
   }
 
   let latestSaladVersion = null;
+  let latestAgentVersion = null;
 
   function parseVersion(v) {
     // "1.9.13.20260324.3" or "1.9.13" → compare first 3 parts
@@ -1368,14 +2192,20 @@ const gpuHot = machines.filter(m => {
             ${fireHtml}${earnHtml}
             ${bwBadge}<span class="salad-badge ${saladClass} normal-only">${saladText}</span>
             ${bwBadge}<span class="salad-badge ${saladClass} compact-only">${m.salad_running ? 'ON' : 'OFF'}</span>
-            <a class="compact-detail-btn" href="/machine?id=${encodeURIComponent(m.machine_id)}">↗</a>
+            <div class="kebab-wrap">
+              <button class="kebab-btn" onclick="toggleKebab(event,this)">⋯</button>
+              <div class="kebab-menu">
+                <a class="kebab-item" href="/machine?id=${encodeURIComponent(m.machine_id)}">↗ Details</a>
+                ${m.command_port ? `<button class="kebab-item" onclick="restartSalad(event,'${m.machine_id}')">↺ Restart Salad</button>` : ''}
+${m.command_port ? `<button class="kebab-item danger" onclick="rebootMachine(event,'${m.machine_id}')">⟳ Reboot PC</button>` : ''}
+              </div>
+            </div>
           </div>
         </div>
         <span class="machine-id">${m.machine_id}</span>
       </div>`;
     if (m.cpu_name) html += `<div class="hostname normal-only">${m.cpu_name}</div>`;
     if (m.ram_total_gb) html += `<div class="hostname normal-only">${Math.round(m.ram_total_gb)}GB RAM</div>`;
-    html += `<a class="stats-btn normal-only" href="/machine?id=${encodeURIComponent(m.machine_id)}">Details ↗</a>`;
 
     if (m.status === 'never') {
       html += `<div class="never-text normal-only">No data</div>`;
@@ -1428,8 +2258,17 @@ const gpuHot = machines.filter(m => {
       const verDisplay = m.salad_version.split('.').slice(0, 3).join('.');
       const verLabel = `Salad v${verDisplay}${outdated ? ' ⚠️' : ''}`;
       const timeStyle = m.status === 'stale' ? 'color:var(--red)' : '';
-      html += `<div class="card-footer normal-only" style="display:flex;justify-content:space-between;align-items:center">
-        <span class="version-badge${outdated ? ' outdated' : ''}">${verLabel}</span>
+      const agentUpdateBtn = m.command_port && latestAgentVersion && latestAgentVersion !== m.agent_version
+        ? `<button class="agent-update-btn" onclick="updateAgent(event,'${m.machine_id}')">⬆ Update to ${latestAgentVersion}</button>`
+        : '';
+      const agentBadge = m.agent_version
+        ? `<span class="version-badge">Agent ${m.agent_version}</span>${agentUpdateBtn}`
+        : '';
+      html += `<div class="card-footer normal-only" style="display:flex;justify-content:space-between;align-items:end">
+        <span style="display:flex;flex-direction:column;gap:3px">
+          <span class="version-badge${outdated ? ' outdated' : ''}">${verLabel}</span>
+          ${agentBadge ? `<span style="display:flex;gap:4px;align-items:center">${agentBadge}</span>` : ''}
+        </span>
         <span style="${timeStyle}">${timeAgo(m.last_seen)}</span>
       </div>`;
     } else {
@@ -1479,6 +2318,7 @@ const gpuHot = machines.filter(m => {
       const data = await res.json();
 
       latestSaladVersion = data.latest_salad_version || null;
+      latestAgentVersion = data.latest_agent_version || null;
 
       // Cookie banner
       const banner     = document.getElementById('cookie-banner');
@@ -1498,22 +2338,47 @@ const gpuHot = machines.filter(m => {
       if (gearTelegram) gearTelegram.style.display = data.telegram_configured ? '' : 'none';
       if (data.telegram_configured) applyTelegramVal(data.telegram_enabled);
 
+      if (data.server_version) {
+        const vEl = document.getElementById('header-version');
+        if (vEl && !vEl.textContent) vEl.textContent = data.server_version;
+      }
+      const badge = document.getElementById('server-update-badge');
+      if (badge && data.server_version_latest) {
+        badge.textContent = `New ${data.server_version_latest}`;
+        badge.style.display = 'inline';
+      }
+
       lastMachines = data.machines;
       renderAlerts(data.machines);
       renderGpuSummary(data.machines);
       renderEarningsSummary(data);
+      renderBreakerBar(data);
+
+      // Show/hide tabs based on Clore config (only apply once)
+      if (typeof _cloreConfigured === 'undefined') {
+        window._cloreConfigured = data.clore_configured;
+        document.getElementById('tabs-bar').style.display = data.clore_configured ? 'flex' : 'none';
+        if (!data.clore_configured) {
+          document.getElementById('tab-salad').style.display = '';
+          document.getElementById('tab-clore').style.display = 'none';
+        }
+      }
+
+      if (data.clore_configured) {
+        renderCloreGrid(data.hiveos, data.clore, data.crypto_prices);
+      }
       applySortAndRender();
 
-      const active = data.active_count;
-      const total  = data.total_count;
-      const badge  = document.getElementById('active-badge');
-      badge.textContent = `Active: ${active}/${total}`;
-      badge.className = 'badge ' + (active === total ? 'green' : active === 0 ? 'red' : 'yellow');
-
-      const earning     = data.machines.filter(m => m.earning_rate != null && m.earning_rate > 0.001).length;
-      const earnBadge   = document.getElementById('earning-badge');
-      earnBadge.textContent = `Earning: ${earning}/${total}`;
-      earnBadge.className = 'badge ' + (earning === total ? 'green' : earning === 0 ? 'red' : 'yellow');
+      const active  = data.active_count;
+      const total   = data.total_count;
+      const earning = data.machines.filter(m => m.earning_rate != null && m.earning_rate > 0.001).length;
+      _tabBadges.salad = {
+        activeText:  `Active: ${active}/${total}`,
+        activeColor: active === total ? 'green' : active === 0 ? 'red' : 'yellow',
+        earnText:    `Earning: ${earning}/${total}`,
+        earnColor:   earning === total ? 'green' : earning === 0 ? 'red' : 'yellow',
+      };
+      if (activeTab === 'salad') _applyHeaderBadges(_tabBadges.salad);
 
       const t = new Date(data.server_time);
       document.getElementById('last-update').textContent =

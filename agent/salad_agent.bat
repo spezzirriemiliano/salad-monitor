@@ -73,8 +73,10 @@ $ServerUrl       = $cfg.server_url.TrimEnd("/")
 $ApiKey          = $cfg.api_key
 $IntervalSeconds = if ($cfg.interval_seconds) { [int][Math]::Min([long]$cfg.interval_seconds, [int]::MaxValue) } else { 60 }
 $CachedSaladMachineId = $cfg.salad_machine_id
+$CommandPort     = if ($cfg.command_port) { [int]$cfg.command_port } else { 8765 }
+$CommandToken    = $ApiKey
 
-$Version = "v0.6"
+$Version = "v0.7"
 Write-Host "[INFO] Salad Monitor Agent $Version"
 Write-Host "[INFO] Machine ID : $MachineId"
 Write-Host "[INFO] Server     : $ServerUrl"
@@ -479,6 +481,160 @@ if ($CachedSaladMachineId) {
 # Load LHM if the DLL is present (once at startup, fails silently)
 Initialize-Lhm | Out-Null
 
+# ── Local IP ─────────────────────────────────────────────────
+
+$LocalIP = try {
+    (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+     Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' -and $_.PrefixOrigin -ne 'WellKnown' } |
+     Sort-Object InterfaceMetric | Select-Object -First 1).IPAddress
+} catch { $null }
+
+# ── Command listener (reboot etc.) ───────────────────────────
+
+$script:LogQueue = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+
+$EnableCommandListener = $false
+
+if ($CommandToken) {
+    $cfgListenerKey = $cfg.PSObject.Properties['command_listener']
+
+    if ($null -eq $cfgListenerKey) {
+        # Not yet decided — ask only if running interactively
+        if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
+            Write-Host ""
+            Write-Host "  ┌─────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
+            Write-Host "  │  Remote Reboot Feature                                  │" -ForegroundColor Cyan
+            Write-Host "  │                                                         │" -ForegroundColor Cyan
+            Write-Host "  │  The dashboard can send a reboot command to this PC.    │" -ForegroundColor Cyan
+            Write-Host "  │  This requires opening port $CommandPort in the firewall.      │" -ForegroundColor Cyan
+            Write-Host "  │                                                         │" -ForegroundColor Cyan
+            Write-Host "  │  A firewall rule 'SaladMonitorAgent-CMD-$CommandPort' will be │" -ForegroundColor Cyan
+            Write-Host "  │  created to allow inbound TCP on port $CommandPort.           │" -ForegroundColor Cyan
+            Write-Host "  └─────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+            Write-Host ""
+            $answer = Read-Host "  Enable remote reboot on this machine? (y/n)"
+            $accepted = $answer.Trim().ToLower() -eq 'y'
+        } else {
+            $accepted = $false
+        }
+
+        # Save decision to config
+        $cfg | Add-Member -NotePropertyName 'command_listener' -NotePropertyValue $accepted -Force
+        try {
+            $cfg | ConvertTo-Json -Depth 5 | Set-Content $ConfigPath -Encoding UTF8
+            Write-Host "[INFO] Remote reboot preference saved to config (enabled=$accepted)"
+        } catch {
+            Write-Host "[WARN] Could not save preference to config: $_"
+        }
+    } else {
+        $accepted = [bool]$cfg.command_listener
+    }
+
+    if ($accepted) {
+        $EnableCommandListener = $true
+        $ruleName = "SaladMonitorAgent-CMD-$CommandPort"
+        $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+        if (-not $existing) {
+            New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP `
+                -LocalPort $CommandPort -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
+        }
+    } else {
+        Write-Host "[INFO] Remote reboot disabled — no listener started"
+    }
+}
+
+if ($EnableCommandListener) {
+    $listenerRunspace = [runspacefactory]::CreateRunspace()
+    $listenerRunspace.Open()
+    $listenerRunspace.SessionStateProxy.SetVariable('CommandPort',  $CommandPort)
+    $listenerRunspace.SessionStateProxy.SetVariable('CommandToken', $CommandToken)
+    $listenerRunspace.SessionStateProxy.SetVariable('LogQueue',     $script:LogQueue)
+    $listenerRunspace.SessionStateProxy.SetVariable('ScriptDir',    $ScriptDir)
+    $listenerPs = [powershell]::Create()
+    $listenerPs.Runspace = $listenerRunspace
+    [void]$listenerPs.AddScript({
+        try {
+            $tcp = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $CommandPort)
+            $tcp.Start()
+            $LogQueue.Enqueue("[INFO] Command listener ready on 0.0.0.0:$CommandPort")
+        } catch {
+            $LogQueue.Enqueue("[WARN] Command listener could not start on port ${CommandPort}: $_")
+            return
+        }
+        while ($true) {
+            try {
+                $client = $tcp.AcceptTcpClient()
+                $stream = $client.GetStream()
+                $reader = [System.IO.StreamReader]::new($stream)
+                $writer = [System.IO.StreamWriter]::new($stream)
+                $writer.AutoFlush = $true
+
+                $requestLine = $reader.ReadLine()
+                $headers = @{}
+                $line = $reader.ReadLine()
+                while ($line -and $line -ne "") {
+                    $parts = $line -split ": ", 2
+                    if ($parts.Count -eq 2) { $headers[$parts[0]] = $parts[1] }
+                    $line = $reader.ReadLine()
+                }
+
+                $rParts = ($requestLine -split " ")
+                $method = $rParts[0]; $path = $rParts[1]
+                $token  = $headers["X-Command-Token"]
+                $ts     = (Get-Date -Format "HH:mm:ss")
+
+                if ($method -eq "POST" -and $token -eq $CommandToken -and $path -eq "/reboot") {
+                    $body = '{"ok":true}'
+                    $writer.WriteLine("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n$body")
+                    $client.Close()
+                    $LogQueue.Enqueue("[$ts] [CMD] Reboot command received — restarting in 10s")
+                    Start-Sleep -Seconds 2
+                    & shutdown.exe /r /t 10
+                } elseif ($method -eq "POST" -and $token -eq $CommandToken -and $path -eq "/restart-salad") {
+                    $body = '{"ok":true}'
+                    $writer.WriteLine("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n$body")
+                    $client.Close()
+                    $LogQueue.Enqueue("[$ts] [CMD] Restart Salad command received")
+                    $saladProcs = Get-Process -Name salad,saladcloud,salad-client -ErrorAction SilentlyContinue
+                    if ($saladProcs) {
+                        $saladExePath = ($saladProcs | Select-Object -First 1).Path
+                        $saladProcs | Stop-Process -Force
+                        $LogQueue.Enqueue("[$ts] [CMD] Salad stopped — relaunching in 3s")
+                        Start-Sleep -Seconds 3
+                        if ($saladExePath -and (Test-Path $saladExePath)) {
+                            Start-Process $saladExePath
+                        } else {
+                            Start-Process "C:\Program Files\Salad\Salad.exe" -ErrorAction SilentlyContinue
+                        }
+                        $LogQueue.Enqueue("[$ts] [CMD] Salad relaunched")
+                    } else {
+                        $LogQueue.Enqueue("[$ts] [CMD] Salad not running — launching")
+                        Start-Process "C:\Program Files\Salad\Salad.exe" -ErrorAction SilentlyContinue
+                    }
+                } elseif ($method -eq "POST" -and $token -eq $CommandToken -and $path -eq "/update-agent") {
+                    $body = '{"ok":true}'
+                    $writer.WriteLine("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n$body")
+                    $client.Close()
+                    $LogQueue.Enqueue("[$ts] [CMD] Remote update command received — launching remote_update.bat")
+                    $updateBat = Join-Path $ScriptDir "remote_update.bat"
+                    if (Test-Path $updateBat) {
+                        Start-Process "cmd.exe" -ArgumentList "/c `"$updateBat`"" -WindowStyle Normal
+                        Start-Sleep -Seconds 1
+                        Start-Process "cmd.exe" -ArgumentList "/c taskkill /F /PID $PID" -WindowStyle Hidden
+                    } else {
+                        $LogQueue.Enqueue("[$ts] [CMD] remote_update.bat not found — aborting")
+                    }
+                } else {
+                    $writer.WriteLine("HTTP/1.1 403 Forbidden`r`nContent-Length: 0`r`nConnection: close`r`n`r`n")
+                    $client.Close()
+                    $LogQueue.Enqueue("[$ts] [WARN] Rejected: $method $path token_ok=$(($token -eq $CommandToken))")
+                }
+            } catch { }
+        }
+    })
+    [void]$listenerPs.BeginInvoke()
+}
+
 # ── Main loop ────────────────────────────────────────────────
 
 $PrevNetSample       = $null
@@ -486,6 +642,10 @@ $SessionUploadedMB   = 0.0
 $SessionDownloadedMB = 0.0
 
 while ($true) {
+    # Drain messages from background runspaces
+    $msg = $null
+    while ($script:LogQueue.TryDequeue([ref]$msg)) { Write-Host $msg }
+
     try {
         $sys          = Get-SystemMetrics
         $gpus         = Get-GpuMetrics
@@ -528,6 +688,8 @@ while ($true) {
         $payload = [PSCustomObject]@{
             machine_id    = $MachineId
             hostname      = $env:COMPUTERNAME
+            local_ip      = $LocalIP
+            command_port  = if ($EnableCommandListener) { $CommandPort } else { $null }
             timestamp     = (Get-Date -Format "o")
             salad_running = $saladRunning
             mode          = $mode
@@ -538,6 +700,7 @@ while ($true) {
             disk_used_pct = $sys.disk_used_pct
             uptime_hours  = $sys.uptime_hours
             cpu_name          = $CpuName
+            agent_version     = $Version
             salad_version     = $SaladVersion
             salad_machine_id  = $SaladMachineId
             gpus              = @($gpus)

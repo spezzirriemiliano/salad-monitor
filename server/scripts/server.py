@@ -20,9 +20,15 @@ import requests as req_lib
 from flask import Flask, request, jsonify, send_from_directory, make_response
 from apscheduler.schedulers.background import BackgroundScheduler
 
+try:
+    import tinytuya
+    _tinytuya_available = True
+except ImportError:
+    _tinytuya_available = False
+
 from telegram_notifier import send_telegram_report
 
-VERSION = "v0.5"
+VERSION = "v0.6"
 _DEV_CONFIG     = Path(__file__).parent.parent / ".dev.config.json"
 _DEFAULT_CONFIG = Path(__file__).parent.parent / "config.json"
 CONFIG_PATH = _DEV_CONFIG if _DEV_CONFIG.exists() else _DEFAULT_CONFIG
@@ -76,6 +82,14 @@ _earnings_trigger_lock = threading.Lock()
 latest_salad_version: str = ""
 latest_version_lock = threading.Lock()
 
+# Latest server version from GitHub
+latest_server_version: str = ""
+server_version_lock = threading.Lock()
+
+# Latest agent version from GitHub
+latest_agent_version: str = ""
+agent_version_lock = threading.Lock()
+
 # Earnings history: { "24h": float, "30d": float, "1h": float }
 earnings_history: dict = {}
 earnings_history_lock = threading.Lock()
@@ -97,6 +111,22 @@ balance_lock = threading.Lock()
 _earnings_history_cache: dict = {}
 _earnings_history_cache_lock = threading.Lock()
 EARNINGS_HISTORY_CACHE_TTL = 30 * 60  # 30 minutes
+
+# Smart home (Tuya) cache: { "power_w": float, "voltage_v": float, "current_a": float, "energy_kwh": float }
+smart_home_cache: dict = {}
+smart_home_lock = threading.Lock()
+
+# HiveOS cache: { "workers": [...], "fetched_at": str }
+hiveos_cache: dict = {}
+hiveos_lock = threading.Lock()
+
+# Clore cache: { "balance": float, "orders": [...], "fetched_at": str }
+clore_cache: dict = {}
+clore_lock = threading.Lock()
+
+# Crypto price cache: { "bitcoin": float, "clore-ai": float }
+crypto_prices: dict = {}
+crypto_prices_lock = threading.Lock()
 
 # Telegram notifications toggle
 telegram_enabled: bool = True
@@ -136,6 +166,264 @@ def fetch_latest_salad_version():
             print(f"[WARN] GitHub releases: HTTP {r.status_code}")
     except Exception as e:
         print(f"[WARN] fetch_latest_salad_version error: {e}")
+
+
+def fetch_latest_agent_version():
+    global latest_agent_version
+    try:
+        url = "https://raw.githubusercontent.com/spezzirriemiliano/salad-monitor/main/agent/salad_agent.bat"
+        r = req_lib.get(url, timeout=8)
+        m = re.search(r'\$Version\s*=\s*"(v[^"]+)"', r.text)
+        if m:
+            with agent_version_lock:
+                latest_agent_version = m.group(1)
+    except Exception:
+        pass
+
+
+def _tuya_fetch_status():
+    """Core Tuya fetch — returns (data_dict, error_str)."""
+    if not _tinytuya_available:
+        return None, "tinytuya not installed (run: pip install tinytuya)"
+    sh = config.get("smartHome", {})
+    api_id     = sh.get("id", "").strip()
+    api_secret = sh.get("secret", "").strip()
+    device_id  = sh.get("device_id", "").strip()
+    region     = sh.get("region", "eu").strip()
+    if not api_id or not api_secret or not device_id:
+        return None, "smartHome config incomplete (id/secret/device_id missing)"
+    try:
+        cloud = tinytuya.Cloud(apiRegion=region, apiKey=api_id, apiSecret=api_secret)
+        status = cloud.getstatus(device_id)
+        if not status:
+            return None, "empty response from Tuya API"
+        if "result" not in status:
+            return None, f"unexpected response: {status}"
+        dps = {item["code"]: item["value"] for item in status["result"]}
+
+        import base64
+
+        def _decode_phase(raw):
+            """Decode Tuya phase_x base64 blob → (voltage_v, current_a, power_w)."""
+            try:
+                b = base64.b64decode(raw)
+                if len(b) < 8:
+                    return None, None, None
+                voltage = int.from_bytes(b[0:2], "big") / 10      # 0.1V units
+                current = int.from_bytes(b[2:5], "big") / 1000    # mA units
+                power   = int.from_bytes(b[5:8], "big")            # W units
+                return round(voltage, 1), round(current, 3), round(power, 1)
+            except Exception:
+                return None, None, None
+
+        voltage_v, current_a, power_w = _decode_phase(dps.get("phase_a"))
+
+        energy_raw = dps.get("total_forward_energy")
+        energy_kwh = round(energy_raw / 1000, 2) if energy_raw is not None else None
+
+        return {
+            "power_w":    power_w,
+            "voltage_v":  voltage_v,
+            "current_a":  current_a,
+            "energy_kwh": energy_kwh,
+            "raw_dps":    dps,
+        }, None
+    except Exception as e:
+        return None, str(e)
+
+
+def fetch_hiveos():
+    """Fetch worker stats from HiveOS API."""
+    cfg = config.get("clore", {}).get("hiveos", {})
+    token   = cfg.get("token", "").strip()
+    farm_id = str(cfg.get("farm_id", "")).strip()
+    if not token or not farm_id:
+        return
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    base    = "https://api2.hiveos.farm/api/v2"
+    try:
+        r = req_lib.get(f"{base}/farms/{farm_id}/workers", headers=headers, timeout=15)
+        if r.status_code == 401:
+            print("[WARN] HiveOS: unauthorized — check token")
+            return
+        if not r.ok:
+            print(f"[WARN] HiveOS: HTTP {r.status_code}")
+            return
+        raw_workers = r.json().get("data", [])
+        workers = []
+        for w in raw_workers:
+            gpu_stats    = w.get("gpu_stats")    or []
+            gpu_info     = w.get("gpu_info")     or []
+            hw_stats     = w.get("hardware_stats") or {}
+            hw_info      = w.get("hardware_info")  or {}
+            gpus = []
+            total_power  = 0
+            for i, gs in enumerate(gpu_stats):
+                gi = gpu_info[i] if i < len(gpu_info) else {}
+                pw = gs.get("power")
+                if pw: total_power += pw
+                gpu_name = (gi.get("name") or gi.get("short_name") or
+                           gi.get("model") or (gi.get("details") or {}).get("name"))
+                if not gpu_name:
+                    m = re.search(r'\b(\d{3,4}\s*(?:ti|super)?)\b', w.get("name", ""), re.IGNORECASE)
+                    if m:
+                        model = re.sub(r'\s+', ' ', m.group(1)).upper()
+                        brand = "RTX" if w.get("has_nvidia") else "RX" if w.get("has_amd") else "GPU"
+                        gpu_name = f"{brand} {model}"
+                gpus.append({
+                    "index":         i,
+                    "name":          gpu_name,
+                    "temperature_c": gs.get("temp"),
+                    "mem_temp_c":    gs.get("memtemp"),
+                    "fan_pct":       gs.get("fan"),
+                    "power_w":       pw,
+                    "core_mhz":      gs.get("core_clock"),
+                    "mem_mhz":       gs.get("mem_clock"),
+                })
+            cpu_info  = hw_info.get("cpu") or {}
+            net_info  = hw_info.get("net") or {}
+            ram_total = hw_stats.get("ram_total")
+            ram_used  = hw_stats.get("ram_used")
+            ram_pct   = round(ram_used / ram_total * 100, 1) if ram_total and ram_used else None
+            uptime_s  = hw_stats.get("uptime")
+            workers.append({
+                "id":           w.get("id"),
+                "name":         w.get("name"),
+                "online":       w.get("stats", {}).get("online", False),
+                "gpus":         gpus,
+                "gpu_count":    len(gpus),
+                "total_power_w": total_power or None,
+                "cpu_pct":      hw_stats.get("cpu_util"),
+                "cpu_name":     cpu_info.get("model"),
+                "ram_used_pct": ram_pct,
+                "ram_used_gb":  round(ram_used / 1024, 1) if ram_used else None,
+                "ram_total_gb": round(ram_total / 1024, 1) if ram_total else None,
+                "uptime_hours": round(uptime_s / 3600, 1) if uptime_s else None,
+                "ip":           (w.get("ip_addresses") or [None])[0],
+                "has_nvidia":   w.get("has_nvidia", False),
+                "has_amd":      w.get("has_amd", False),
+                "miners":       w.get("miners_summary") or {},
+            })
+        with hiveos_lock:
+            hiveos_cache["workers"]    = workers
+            hiveos_cache["fetched_at"] = datetime.now(timezone.utc).isoformat()
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] HiveOS: {len(workers)} workers fetched")
+    except Exception as e:
+        print(f"[WARN] fetch_hiveos error: {e}")
+
+
+def fetch_clore():
+    """Fetch hosted server stats from Clore.ai API."""
+    token = config.get("clore", {}).get("api_token", "").strip()
+    if not token:
+        return
+    headers = {"auth": token}
+    base = "https://api.clore.ai/v1"
+    try:
+        r = req_lib.get(f"{base}/my_servers", headers=headers, timeout=10)
+        if not r.ok:
+            print(f"[WARN] Clore my_servers: HTTP {r.status_code}")
+            return
+        data = r.json()
+        if data.get("code") != 0:
+            print(f"[WARN] Clore my_servers: code={data.get('code')}")
+            return
+
+        servers = []
+        total_earning = 0.0
+        for s in (data.get("servers") or []):
+            specs    = s.get("specs") or {}
+            usd_p    = s.get("usd_pricing") or {}
+            price_day = ((usd_p.get("USD-Blockchain") or {}).get("on_demand") or
+                         s.get("pricing", {}).get("USD-Blockchain"))
+            price    = round(price_day / 24, 4) if price_day else None
+            rented   = s.get("rented", False)
+            if rented and price:
+                total_earning += price
+            remaining_end_ms = s.get("remaining_time")
+            remaining_h = round((remaining_end_ms / 1000 - time.time()) / 3600, 1) if remaining_end_ms else None
+            servers.append({
+                "id":              s.get("id"),
+                "name":            (s.get("name") or "").strip(),
+                "online":          s.get("online", False),
+                "connected":       s.get("connected", False),
+                "working_properly": s.get("working_properly", True),
+                "rented":          rented,
+                "price_usd":       price,
+                "gpu_array":       s.get("gpu_array") or [],
+                "gpu_count":       s.get("gpu_count", 0),
+                "reliability":     s.get("reliability"),
+                "remaining_h":     remaining_h,
+                "cpu":             specs.get("cpu"),
+                "ram_gb":          specs.get("ram"),
+                "net_down":        (specs.get("net") or {}).get("down"),
+                "net_up":          (specs.get("net") or {}).get("up"),
+            })
+
+        with clore_lock:
+            clore_cache["servers"]       = servers
+            clore_cache["total_earning"] = round(total_earning, 4)
+            clore_cache["fetched_at"]    = datetime.now(timezone.utc).isoformat()
+
+        rented_n = sum(1 for s in servers if s["rented"])
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Clore: {rented_n}/{len(servers)} rented ${total_earning:.3f}/hr")
+    except Exception as e:
+        print(f"[WARN] fetch_clore error: {e}")
+
+
+def fetch_clore_wallets():
+    """Fetch wallet balances from Clore.ai — called infrequently to avoid 429."""
+    token = config.get("clore", {}).get("api_token", "").strip()
+    if not token:
+        return
+    try:
+        r = req_lib.get("https://api.clore.ai/v1/wallets", headers={"auth": token}, timeout=10)
+        if r.ok:
+            wallets = r.json()
+            with clore_lock:
+                clore_cache["wallets"] = wallets
+                clore_cache["wallets_fetched_at"] = datetime.now(timezone.utc).isoformat()
+                clore_cache["wallets_error"] = None
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Clore wallets: {wallets}")
+        else:
+            with clore_lock:
+                clore_cache["wallets_error"] = r.status_code
+            print(f"[WARN] fetch_clore_wallets: HTTP {r.status_code} — keeping last cached data")
+    except Exception as e:
+        with clore_lock:
+            clore_cache["wallets_error"] = str(e)
+        print(f"[WARN] fetch_clore_wallets error: {e} — keeping last cached data")
+
+
+def fetch_crypto_prices():
+    """Fetch BTC and CLORE spot prices in USD from CoinGecko (free, no auth)."""
+    try:
+        r = req_lib.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": "bitcoin,clore-ai", "vs_currencies": "usd"},
+            timeout=10,
+        )
+        if not r.ok:
+            print(f"[WARN] CoinGecko: HTTP {r.status_code}")
+            return
+        data = r.json()
+        with crypto_prices_lock:
+            crypto_prices["bitcoin"]  = data.get("bitcoin",  {}).get("usd")
+            crypto_prices["clore-ai"] = data.get("clore-ai", {}).get("usd")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Prices: BTC=${crypto_prices.get('bitcoin')} CLORE=${crypto_prices.get('clore-ai')}")
+    except Exception as e:
+        print(f"[WARN] fetch_crypto_prices error: {e}")
+
+
+def fetch_smart_home():
+    """Read power metrics from the Tuya smart home circuit breaker."""
+    data, err = _tuya_fetch_status()
+    if err:
+        print(f"[WARN] fetch_smart_home: {err}")
+        return
+    with smart_home_lock:
+        smart_home_cache.update({k: v for k, v in data.items() if k != "raw_dps"})
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Smart home: {data['power_w']}W {data['voltage_v']}V")
 
 
 def fetch_earnings_history():
@@ -420,6 +708,8 @@ def load_config():
 
 config = load_config()
 API_KEY = config["server"]["api_key"]
+AGENT_COMMAND_PORT  = config.get("agent_command", {}).get("port", 8765)
+AGENT_COMMAND_TOKEN = API_KEY
 REPORT_INTERVAL_MINUTES = config["telegram"].get("report_interval_minutes", 15)
 STALE_THRESHOLD_MINUTES = config["telegram"].get("stale_threshold_minutes", 5)
 telegram_enabled = config["telegram"].get("notifications_enabled", True)
@@ -607,6 +897,50 @@ def receive_report():
     return jsonify({"status": "ok"}), 200
 
 
+def _agent_command(machine_id, command):
+    """Send a command to a machine's agent listener."""
+    if not AGENT_COMMAND_TOKEN:
+        return jsonify({"error": "agent_command.token not configured"}), 503
+    with store_lock:
+        m = metrics_store.get(machine_id)
+    if not m:
+        return jsonify({"error": "machine not found"}), 404
+    ip = m.get("local_ip")
+    if not ip:
+        return jsonify({"error": "machine IP not available (agent needs to be updated)"}), 503
+    if not m.get("command_port"):
+        return jsonify({"error": "remote commands not enabled on this machine"}), 503
+    url = f"http://{ip}:{AGENT_COMMAND_PORT}/{command}"
+    try:
+        r = req_lib.post(url, headers={"X-Command-Token": AGENT_COMMAND_TOKEN}, timeout=5)
+        if r.ok:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Command '{command}' sent to {machine_id} ({ip})")
+            return jsonify({"ok": True}), 200
+        return jsonify({"error": f"agent returned {r.status_code}"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/machines/<machine_id>/reboot", methods=["POST"])
+def api_machine_reboot(machine_id):
+    err = _require_auth()
+    if err: return err
+    return _agent_command(machine_id, "reboot")
+
+
+@app.route("/api/machines/<machine_id>/restart-salad", methods=["POST"])
+def api_machine_restart_salad(machine_id):
+    err = _require_auth()
+    if err: return err
+    return _agent_command(machine_id, "restart-salad")
+
+
+@app.route("/api/machines/<machine_id>/update-agent", methods=["POST"])
+def api_machine_update_agent(machine_id):
+    err = _require_auth()
+    if err: return err
+    return _agent_command(machine_id, "update-agent")
+
 
 @app.route("/status", methods=["GET"])
 def get_status():
@@ -781,6 +1115,7 @@ def api_dashboard():
             "uptime_hours": m.get("uptime_hours"),
             "hostname": m.get("hostname"),
             "cpu_name": m.get("cpu_name"),
+            "agent_version": m.get("agent_version"),
             "salad_version": m.get("salad_version"),
             "salad_machine_id": m.get("salad_machine_id"),
             "last_seen": received_at,
@@ -788,6 +1123,8 @@ def api_dashboard():
             "bandwidth": m.get("bandwidth"),
             "bandwidth_totals": _bw_totals(bw_hist_snap[mid], now) if mid in bw_hist_snap else None,
             "earning_rate": e_snap.get(mid),
+            "local_ip": m.get("local_ip"),
+            "command_port": m.get("command_port"),
         })
 
     with earnings_history_lock:
@@ -796,8 +1133,23 @@ def api_dashboard():
     with latest_version_lock:
         latest_ver = latest_salad_version
 
+    with agent_version_lock:
+        latest_agent_ver = latest_agent_version
+
     with balance_lock:
         b_snap = dict(balance_cache)
+
+    with smart_home_lock:
+        sh_snap = dict(smart_home_cache)
+
+    with hiveos_lock:
+        hiveos_snap = dict(hiveos_cache)
+
+    with clore_lock:
+        clore_snap = dict(clore_cache)
+
+    with crypto_prices_lock:
+        prices_snap = dict(crypto_prices)
 
     tg_cfg = config.get("telegram", {})
     telegram_configured = bool(tg_cfg.get("token", "").strip() and tg_cfg.get("chat_id", "").strip())
@@ -813,12 +1165,34 @@ def api_dashboard():
         "earnings_24h": h_snap.get("24h"),
         "earnings_30d": h_snap.get("30d"),
         "latest_salad_version": latest_ver or None,
+        "latest_agent_version": latest_agent_ver or None,
         "balance_current":  b_snap.get("current"),
         "balance_lifetime": b_snap.get("lifetime"),
         "telegram_configured": telegram_configured,
         "telegram_enabled": telegram_enabled,
         "salad_cookie_status": salad_cookie_status,
+        "server_version": VERSION,
+        "server_version_latest": latest_server_version or None,
+        "smart_home_configured": bool(config.get("smartHome")),
+        "clore_configured": bool(config.get("clore", {}).get("api_token", "").strip()),
+        "smart_home": sh_snap or None,
+        "hiveos": hiveos_snap or None,
+        "clore": clore_snap or None,
+        "crypto_prices": prices_snap or None,
     })
+
+
+
+@app.route("/api/smart-home/test", methods=["GET"])
+def api_smart_home_test():
+    err = _require_auth()
+    if err: return err
+    data, error = _tuya_fetch_status()
+    if error:
+        return jsonify({"ok": False, "error": error}), 200
+    with smart_home_lock:
+        smart_home_cache.update({k: v for k, v in data.items() if k != "raw_dps"})
+    return jsonify({"ok": True, "data": data}), 200
 
 
 @app.route("/api/earnings/<salad_machine_id>", methods=["GET"])
@@ -984,12 +1358,29 @@ def main():
     scheduler.add_job(fetch_salad_earnings,        "interval", minutes=5,  id="salad_earnings")
     scheduler.add_job(fetch_earnings_history,      "interval", minutes=30, id="salad_history")
     scheduler.add_job(fetch_latest_salad_version,  "interval", minutes=30, id="salad_version")
+    scheduler.add_job(fetch_latest_agent_version,  "interval", minutes=30, id="agent_version")
     scheduler.add_job(fetch_balance,               "interval", minutes=10, id="salad_balance")
+    if config.get("smartHome"):
+        scheduler.add_job(fetch_smart_home,        "interval", minutes=1,  id="smart_home")
+    if config.get("clore", {}).get("api_token", "").strip():
+        scheduler.add_job(fetch_hiveos,            "interval", minutes=1,  id="hiveos")
+        scheduler.add_job(fetch_clore,             "interval", minutes=5,  id="clore")
+        scheduler.add_job(fetch_clore_wallets,     "interval", minutes=30, id="clore_wallets")
+    scheduler.add_job(fetch_crypto_prices,         "interval", minutes=15,  id="crypto_prices")
+    scheduler.add_job(check_for_update,            "interval", hours=6,    id="server_update")
     scheduler.start()
     threading.Thread(target=fetch_salad_earnings,       daemon=True).start()
     threading.Thread(target=fetch_earnings_history,     daemon=True).start()
     threading.Thread(target=fetch_latest_salad_version, daemon=True).start()
+    threading.Thread(target=fetch_latest_agent_version, daemon=True).start()
+    threading.Thread(target=check_for_update,           daemon=True).start()
     threading.Thread(target=fetch_balance,              daemon=True).start()
+    if config.get("smartHome"):
+        threading.Thread(target=fetch_smart_home,       daemon=True).start()
+    if config.get("clore", {}).get("api_token", "").strip():
+        threading.Thread(target=fetch_hiveos,           daemon=True).start()
+        threading.Thread(target=fetch_clore,            daemon=True).start()
+    threading.Thread(target=fetch_crypto_prices,        daemon=True).start()
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1005,6 +1396,23 @@ def main():
     print(f"{GREEN}[INFO] Salad Monitor Server {VERSION} starting on {local_ip}:{port}{RESET}")
     print(f"[INFO] Telegram reports every {REPORT_INTERVAL_MINUTES} minutes")
 
+    if config.get("clore", {}).get("api_token", "").strip():
+        print(f"[INFO] Clore AI: API token configured")
+        hv = config.get("clore", {}).get("hiveos", {})
+        if not hv.get("token") or not hv.get("farm_id"):
+            print(f"{RED}[WARN] HiveOS config incomplete — clore.hiveos disabled{RESET}")
+        else:
+            print(f"[INFO] HiveOS: farm_id={hv['farm_id']}")
+
+    sh = config.get("smartHome", {})
+    if sh:
+        if not _tinytuya_available:
+            print(f"{RED}[WARN] tinytuya not installed — smart home disabled. Run: pip install tinytuya{RESET}")
+        elif not sh.get("id") or not sh.get("secret") or not sh.get("device_id"):
+            print(f"{RED}[WARN] smartHome config incomplete — smart home disabled{RESET}")
+        else:
+            print(f"[INFO] Smart home: device {sh['device_id']} region={sh.get('region','eu')}")
+
     auth_cookie = config.get("salad_api", {}).get("auth_cookie", "")
     if not auth_cookie:
         print(f"{RED}[WARN] Salad cookie not configured. Run update_credentials.bat to set it up.{RESET}")
@@ -1018,6 +1426,7 @@ def main():
 
 
 def check_for_update():
+    global latest_server_version
     GREEN = "\033[92m"
     RESET = "\033[0m"
     try:
@@ -1028,11 +1437,12 @@ def check_for_update():
             return
         remote = m.group(1)
         if remote != VERSION:
+            with server_version_lock:
+                latest_server_version = remote
             print(f"{GREEN}[UPDATE] New version available: {remote} — run server_self_update.bat to update.{RESET}")
     except Exception:
         pass
 
 
 if __name__ == "__main__":
-    check_for_update()
     main()
